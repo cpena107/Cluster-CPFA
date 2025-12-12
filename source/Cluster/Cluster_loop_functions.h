@@ -1,25 +1,25 @@
-#ifndef Minimap_LOOP_FUNCTIONS_H
-#define Minimap_LOOP_FUNCTIONS_H
+#ifndef Cluster_LOOP_FUNCTIONS_H
+#define Cluster_LOOP_FUNCTIONS_H
 
 #include <argos3/core/simulator/loop_functions.h>
 #include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
 #include <argos3/core/simulator/entity/floor_entity.h>
-#include <source/Minimap/Minimap_controller.h>
+#include <source/Cluster/Cluster_controller.h>
 
 using namespace argos;
 using namespace std;
 
 static const size_t GENOME_SIZE = 7; // There are 7 parameters to evolve
 
-class Minimap_loop_functions : public argos::CLoopFunctions
+class Cluster_loop_functions : public argos::CLoopFunctions
 {
 
-	friend class Minimap_controller;
-	friend class Minimap_qt_user_functions;
+	friend class Cluster_controller;
+	friend class Cluster_qt_user_functions;
 
 	public:
 
-		Minimap_loop_functions();
+		Cluster_loop_functions();
 	   
 		void Init(argos::TConfigurationNode &t_tree);
 		void Reset();
@@ -87,7 +87,7 @@ class Minimap_loop_functions : public argos::CLoopFunctions
 		size_t ClusterLengthY;
 		size_t PowerRank;
 
-	/* Minimap variables */
+	/* Cluster variables */
 	argos::Real ProbabilityOfSwitchingToSearching;
 	argos::Real ProbabilityOfReturningToNest;
 	argos::Real ProbabilityOfSearchingLowClusters;
@@ -147,4 +147,4 @@ class Minimap_loop_functions : public argos::CLoopFunctions
 		int PrintFinalScore;
 };
 
-#endif /* Minimap_LOOP_FUNCTIONS_H */
+#endif /* Cluster_LOOP_FUNCTIONS_H */

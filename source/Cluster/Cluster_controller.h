@@ -1,22 +1,22 @@
-#ifndef Minimap_CONTROLLER_H
-#define Minimap_CONTROLLER_H
+#ifndef Cluster_CONTROLLER_H
+#define Cluster_CONTROLLER_H
 
 #include <source/Base/BaseController.h>
 #include <source/Base/Pheromone.h>
-#include <source/Minimap/Minimap_loop_functions.h>
+#include <source/Cluster/Cluster_loop_functions.h>
 
 using namespace std;
 using namespace argos;
 
 static unsigned int num_targets_collected = 0;
 
-class Minimap_loop_functions;
+class Cluster_loop_functions;
 
-class Minimap_controller : public BaseController {
+class Cluster_controller : public BaseController {
 
 	public:
 
-		Minimap_controller();
+		Cluster_controller();
 
 		// CCI_Controller inheritence functions
 		void Init(argos::TConfigurationNode &node);
@@ -29,11 +29,11 @@ class Minimap_controller : public BaseController {
 
 		Real FoodDistanceTolerance;
 
-		void SetLoopFunctions(Minimap_loop_functions* lf);
+		void SetLoopFunctions(Cluster_loop_functions* lf);
 
 	private:
         string controllerID;
-		Minimap_loop_functions* LoopFunctions;
+		Cluster_loop_functions* LoopFunctions;
 		argos::CRandom::CRNG* RNG;
 
 		/* pheromone trail variables */
@@ -56,22 +56,22 @@ class Minimap_controller : public BaseController {
 		size_t MaxTrailSize;
 		size_t SearchTime;
 
-		/* iAnt Minimap state variable */
-		enum Minimap_state {
+		/* iAnt Cluster state variable */
+		enum Cluster_state {
 			DEPARTING = 0,
 			SEARCHING = 1,
 			RETURNING = 2,
 			SURVEYING = 3
-		} Minimap_state;
+		} Cluster_state;
 
-		/* iAnt Minimap state functions */
-		void Minimap();
+		/* iAnt Cluster state functions */
+		void Cluster();
 		void Departing();
 		void Searching();
 		void Returning();
 		void Surveying();
 
-	/* Minimap helper functions */
+	/* Cluster helper functions */
 	void SetRandomSearchLocation();
 	void SetLowClusterSearchLocation();
 	void SetHoldingFood();
@@ -107,4 +107,4 @@ class Minimap_controller : public BaseController {
 	bool isLostResource;
 };
 
-#endif /* Minimap_CONTROLLER_H */
+#endif /* Cluster_CONTROLLER_H */

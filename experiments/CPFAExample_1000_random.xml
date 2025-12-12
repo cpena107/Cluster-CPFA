@@ -16,8 +16,8 @@
   <!-- *************** -->
   <controllers>
 
-    <Minimap_controller id="Minimap"
-                     library="build/source/Minimap/libMinimap_controller">
+    <CPFA_controller id="CPFA"
+                     library="build/source/CPFA/libCPFA_controller">
       <actuators>
         <differential_steering implementation = "default"/>
       </actuators>
@@ -43,21 +43,19 @@
                   RobotRotationSpeed                = "8.0"
 		  DestinationNoiseStdev             = "0.0"
 		  PositionNoiseStdev             = "0.00"
-		  VisitedLocationTolerance          = "0.3"
 		  ResultsDirectoryPath              = "results/"/>
       </params>
 
-    </Minimap_controller>
+    </CPFA_controller>
 
   </controllers>
 
-  <loop_functions library = "build/source/Minimap/libMinimap_loop_functions"
-                  label   = "Minimap_loop_functions">
+  <loop_functions library = "build/source/CPFA/libCPFA_loop_functions"
+                  label   = "CPFA_loop_functions">
 
     <!-- evolvable parameters -->
-        <Minimap       ProbabilityOfSwitchingToSearching = "0.504"
+        <CPFA       ProbabilityOfSwitchingToSearching = "0.504"
                     ProbabilityOfReturningToNest      = "0.001"
-                    ProbabilityOfSearchingLowClusters = "0.3"
                     UninformedSearchVariation         = "7.0"
                     RateOfInformedSearchDecay         = "0.28"
                     RateOfSiteFidelity                = "4.27"
@@ -76,7 +74,7 @@
                     DrawTrails = "0"
                     DrawTargetRays = "0"
                     FoodDistribution = "0"
-                    FoodItemCount = "100"
+                    FoodItemCount = "1000"
                     NumberOfClusters = "4"
                     ClusterWidthX = "8"
                     ClusterLengthY = "8"
@@ -102,8 +100,8 @@
                 layout="2, 3, 1" />
       <orientation method="constant" values="0.0, 0.0, 0.0" />
       <entity quantity="6" max_trials="100">
-        <foot-bot id="Minimap_">
-          <controller config="Minimap"/>
+        <foot-bot id="CPFA_">
+          <controller config="CPFA"/>
         </foot-bot>
       </entity>
     </distribute>
@@ -138,7 +136,7 @@
             <placement index="5" position="-3,0,2" look_at="1,0,0" up="1,0,0" lens_focal_length="35"/>
           </placements>
         </camera>
-        <user_functions label="Minimap_qt_user_functions"/>
+        <user_functions label="CPFA_qt_user_functions"/>
     </qt-opengl>
 
   </visualization>

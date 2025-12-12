@@ -1,6 +1,6 @@
-#include "Minimap_loop_functions.h"
+#include "Cluster_loop_functions.h"
 
-Minimap_loop_functions::Minimap_loop_functions() :
+Cluster_loop_functions::Cluster_loop_functions() :
 	RNG(argos::CRandom::CreateRNG("argos")),
 	MaxSimTime(3600 * GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick()),
 	ResourceDensityDelay(0),
@@ -39,19 +39,19 @@ Minimap_loop_functions::Minimap_loop_functions() :
 	PrintFinalScore(0)
 {}
 
-void Minimap_loop_functions::Init(argos::TConfigurationNode &node) {	
+void Cluster_loop_functions::Init(argos::TConfigurationNode &node) {	
 	argos::CDegrees USV_InDegrees;
-	argos::TConfigurationNode Minimap_node = argos::GetNode(node, "Minimap");
+	argos::TConfigurationNode Cluster_node = argos::GetNode(node, "Cluster");
 
-	argos::GetNodeAttribute(Minimap_node, "ProbabilityOfSwitchingToSearching", ProbabilityOfSwitchingToSearching);
-	argos::GetNodeAttribute(Minimap_node, "ProbabilityOfReturningToNest",      ProbabilityOfReturningToNest);
-	argos::GetNodeAttributeOrDefault(Minimap_node, "ProbabilityOfSearchingLowClusters", ProbabilityOfSearchingLowClusters, 0.0);
-	argos::GetNodeAttribute(Minimap_node, "UninformedSearchVariation",         USV_InDegrees);
-	argos::GetNodeAttribute(Minimap_node, "RateOfInformedSearchDecay",         RateOfInformedSearchDecay);
-	argos::GetNodeAttribute(Minimap_node, "RateOfSiteFidelity",                RateOfSiteFidelity);
-	argos::GetNodeAttribute(Minimap_node, "RateOfLayingPheromone",             RateOfLayingPheromone);
-	argos::GetNodeAttribute(Minimap_node, "RateOfPheromoneDecay",              RateOfPheromoneDecay);
-	argos::GetNodeAttribute(Minimap_node, "PrintFinalScore",                   PrintFinalScore);
+	argos::GetNodeAttribute(Cluster_node, "ProbabilityOfSwitchingToSearching", ProbabilityOfSwitchingToSearching);
+	argos::GetNodeAttribute(Cluster_node, "ProbabilityOfReturningToNest",      ProbabilityOfReturningToNest);
+	argos::GetNodeAttributeOrDefault(Cluster_node, "ProbabilityOfSearchingLowClusters", ProbabilityOfSearchingLowClusters, 0.0);
+	argos::GetNodeAttribute(Cluster_node, "UninformedSearchVariation",         USV_InDegrees);
+	argos::GetNodeAttribute(Cluster_node, "RateOfInformedSearchDecay",         RateOfInformedSearchDecay);
+	argos::GetNodeAttribute(Cluster_node, "RateOfSiteFidelity",                RateOfSiteFidelity);
+	argos::GetNodeAttribute(Cluster_node, "RateOfLayingPheromone",             RateOfLayingPheromone);
+	argos::GetNodeAttribute(Cluster_node, "RateOfPheromoneDecay",              RateOfPheromoneDecay);
+	argos::GetNodeAttribute(Cluster_node, "PrintFinalScore",                   PrintFinalScore);
 
 	UninformedSearchVariation = ToRadians(USV_InDegrees);
 	argos::TConfigurationNode settings_node = argos::GetNode(node, "settings");
@@ -97,7 +97,7 @@ void Minimap_loop_functions::Init(argos::TConfigurationNode &node) {
 	for(it = footbots.begin(); it != footbots.end(); it++) {
 		argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
 		BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
-		Minimap_controller& c2 = dynamic_cast<Minimap_controller&>(c);
+		Cluster_controller& c2 = dynamic_cast<Cluster_controller&>(c);
 
 		c2.SetLoopFunctions(this);
 	}
@@ -106,7 +106,7 @@ void Minimap_loop_functions::Init(argos::TConfigurationNode &node) {
     ForageList.clear(); 
 }
 
-void Minimap_loop_functions::Reset() {
+void Cluster_loop_functions::Reset() {
 	if(VariableFoodPlacement == 0) {
 		RNG->Reset();
 	}
@@ -132,14 +132,14 @@ void Minimap_loop_functions::Reset() {
 	for(it = footbots.begin(); it != footbots.end(); it++) {
 		argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
 		BaseController& c = dynamic_cast<BaseController&>(footBot.GetControllableEntity().GetController());
-		Minimap_controller& c2 = dynamic_cast<Minimap_controller&>(c);
+		Cluster_controller& c2 = dynamic_cast<Cluster_controller&>(c);
 
 		MoveEntity(footBot.GetEmbodiedEntity(), c2.GetStartPosition(), argos::CQuaternion(), false);
     c2.Reset();
 	}
 }
 
-void Minimap_loop_functions::PreStep() {
+void Cluster_loop_functions::PreStep() {
 	UpdatePheromoneList();
 
 	if(GetSpace().GetSimulationClock() > ResourceDensityDelay) {
@@ -157,11 +157,11 @@ void Minimap_loop_functions::PreStep() {
 	}
 }
 
-void Minimap_loop_functions::PostStep() {
+void Cluster_loop_functions::PostStep() {
 	// nothing... yet...
 }
 
-bool Minimap_loop_functions::IsExperimentFinished() {
+bool Cluster_loop_functions::IsExperimentFinished() {
 	bool isFinished = false;
 
 	if(FoodList.size() == 0 || GetSpace().GetSimulationClock() >= MaxSimTime) {
@@ -183,15 +183,15 @@ bool Minimap_loop_functions::IsExperimentFinished() {
 	return isFinished;
 }
 
-void Minimap_loop_functions::PostExperiment() {
+void Cluster_loop_functions::PostExperiment() {
 	if (PrintFinalScore == 1) printf("%f, %f\n", getSimTimeInSeconds(), score);
 }
 
-argos::CColor Minimap_loop_functions::GetFloorColor(const argos::CVector2 &c_pos_on_floor) {
+argos::CColor Cluster_loop_functions::GetFloorColor(const argos::CVector2 &c_pos_on_floor) {
 	return argos::CColor::WHITE;
 }
 
-void Minimap_loop_functions::UpdatePheromoneList() {
+void Cluster_loop_functions::UpdatePheromoneList() {
 	// Return if this is not a tick that lands on a 0.5 second interval
 	if ((int)(GetSpace().GetSimulationClock()) % ((int)(GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick()) / 2) != 0) return;
 	
@@ -216,7 +216,7 @@ void Minimap_loop_functions::UpdatePheromoneList() {
 	PheromoneList = new_p_list;
 }
 
-void Minimap_loop_functions::SetFoodDistribution() {
+void Cluster_loop_functions::SetFoodDistribution() {
 	switch(FoodDistribution) {
 		case 0:
 			RandomFoodDistribution();
@@ -232,7 +232,7 @@ void Minimap_loop_functions::SetFoodDistribution() {
 	}
 }
 
-void Minimap_loop_functions::RandomFoodDistribution() {
+void Cluster_loop_functions::RandomFoodDistribution() {
 	FoodList.clear();
 
 	argos::CVector2 placementPosition;
@@ -249,7 +249,7 @@ void Minimap_loop_functions::RandomFoodDistribution() {
 	}
 }
 
-void Minimap_loop_functions::ClusterFoodDistribution() {
+void Cluster_loop_functions::ClusterFoodDistribution() {
         FoodList.clear();
 	argos::Real     foodOffset  = 3.0 * FoodRadius;
 	size_t          foodToPlace = NumberOfClusters * ClusterWidthX * ClusterLengthY;
@@ -292,7 +292,7 @@ void Minimap_loop_functions::ClusterFoodDistribution() {
 	}
 }
 
-void Minimap_loop_functions::PowerLawFoodDistribution() {
+void Cluster_loop_functions::PowerLawFoodDistribution() {
  FoodList.clear();
 	argos::Real foodOffset     = 3.0 * FoodRadius;
 	size_t      foodPlaced     = 0;
@@ -389,7 +389,7 @@ void Minimap_loop_functions::PowerLawFoodDistribution() {
 	FoodItemCount = foodPlaced;
 }
 
-bool Minimap_loop_functions::IsOutOfBounds(argos::CVector2 p, size_t length, size_t width) {
+bool Cluster_loop_functions::IsOutOfBounds(argos::CVector2 p, size_t length, size_t width) {
 	argos::CVector2 placementPosition = p;
 
 	argos::Real foodOffset   = 3.0 * FoodRadius;
@@ -424,14 +424,14 @@ bool Minimap_loop_functions::IsOutOfBounds(argos::CVector2 p, size_t length, siz
 	return false;
 }
 
-bool Minimap_loop_functions::IsCollidingWithNest(argos::CVector2 p) {
+bool Cluster_loop_functions::IsCollidingWithNest(argos::CVector2 p) {
 	argos::Real nestRadiusPlusBuffer = NestRadius + FoodRadius;
 	argos::Real NRPB_squared = nestRadiusPlusBuffer * nestRadiusPlusBuffer;
 
 	return ((p - NestPosition).SquareLength() < NRPB_squared);
 }
 
-bool Minimap_loop_functions::IsCollidingWithFood(argos::CVector2 p) {
+bool Cluster_loop_functions::IsCollidingWithFood(argos::CVector2 p) {
 	argos::Real foodRadiusPlusBuffer = 2.0 * FoodRadius;
 	argos::Real FRPB_squared = foodRadiusPlusBuffer * foodRadiusPlusBuffer;
 
@@ -442,60 +442,60 @@ bool Minimap_loop_functions::IsCollidingWithFood(argos::CVector2 p) {
 	return false;
 }
 
-unsigned int Minimap_loop_functions::getNumberOfRobots() {
+unsigned int Cluster_loop_functions::getNumberOfRobots() {
 	return GetSpace().GetEntitiesByType("foot-bot").size();
 }
 
-double Minimap_loop_functions::getProbabilityOfSwitchingToSearching() {
+double Cluster_loop_functions::getProbabilityOfSwitchingToSearching() {
 	return ProbabilityOfSwitchingToSearching;
 }
 
-double Minimap_loop_functions::getProbabilityOfReturningToNest() {
+double Cluster_loop_functions::getProbabilityOfReturningToNest() {
 	return ProbabilityOfReturningToNest;
 }
 
 // Value in Radians
-double Minimap_loop_functions::getUninformedSearchVariation() {
+double Cluster_loop_functions::getUninformedSearchVariation() {
 	return UninformedSearchVariation.GetValue();
 }
 
-double Minimap_loop_functions::getRateOfInformedSearchDecay() {
+double Cluster_loop_functions::getRateOfInformedSearchDecay() {
 	return RateOfInformedSearchDecay;
 }
 
-double Minimap_loop_functions::getRateOfSiteFidelity() {
+double Cluster_loop_functions::getRateOfSiteFidelity() {
 	return RateOfSiteFidelity;
 }
 
-double Minimap_loop_functions::getRateOfLayingPheromone() {
+double Cluster_loop_functions::getRateOfLayingPheromone() {
 	return RateOfLayingPheromone;
 }
 
-double Minimap_loop_functions::getRateOfPheromoneDecay() {
+double Cluster_loop_functions::getRateOfPheromoneDecay() {
 	return RateOfPheromoneDecay;
 }
 
-argos::Real Minimap_loop_functions::getSimTimeInSeconds() {
+argos::Real Cluster_loop_functions::getSimTimeInSeconds() {
 	int ticks_per_second = GetSimulator().GetPhysicsEngine("Default").GetInverseSimulationClockTick();
 	float sim_time = GetSpace().GetSimulationClock();
 	return sim_time/ticks_per_second;
 }
 
-void Minimap_loop_functions::SetTrial(unsigned int v) {
+void Cluster_loop_functions::SetTrial(unsigned int v) {
 }
 
-void Minimap_loop_functions::setScore(double s) {
+void Cluster_loop_functions::setScore(double s) {
 	score = s;
 	if (score >= FoodItemCount) {
 		PostExperiment();
 	}
 }
 
-double Minimap_loop_functions::Score() {	
+double Cluster_loop_functions::Score() {	
 	return score;
 }
 
-void Minimap_loop_functions::ConfigureFromGenome(Real* g)
+void Cluster_loop_functions::ConfigureFromGenome(Real* g)
 {
 	// Assign genome generated by the GA to the appropriate internal variables.
 	ProbabilityOfSwitchingToSearching = g[0];
@@ -511,7 +511,7 @@ void Minimap_loop_functions::ConfigureFromGenome(Real* g)
  * Update visited location clusters by detecting grid-based regions
  * and merging visited locations when coverage exceeds 50%
  *****/
-void Minimap_loop_functions::UpdateVisitedClusters() {
+void Cluster_loop_functions::UpdateVisitedClusters() {
 	if(VisitedLocations.empty()) return;
 
 	// Proximity-based clustering: group nearby visited points and compute centroid
@@ -573,7 +573,7 @@ void Minimap_loop_functions::UpdateVisitedClusters() {
  * Calculate the coverage percentage of a cluster based on visited locations
  * Returns a value between 0.0 and 1.0
  *****/
-argos::Real Minimap_loop_functions::CalculateClusterCoverage(const VisitedCluster& cluster) {
+argos::Real Cluster_loop_functions::CalculateClusterCoverage(const VisitedCluster& cluster) {
 	// Estimate coverage using a circular cluster radius and visit spacing
 	argos::Real visitTolerance = 0.3; // Same default as controller memory spacing
 	argos::Real clusterRadius = std::max(cluster.width, cluster.height) / 2.0;
@@ -587,7 +587,7 @@ argos::Real Minimap_loop_functions::CalculateClusterCoverage(const VisitedCluste
 /*****
  * Merge clusters into bigger super-clusters when combined area exceeds 40% of potential merged cluster
  *****/
-void Minimap_loop_functions::MergeClustersIntoSuperClusters() {
+void Cluster_loop_functions::MergeClustersIntoSuperClusters() {
 	if(VisitedClusters.size() < 2) return;
 
 	// Calculate arena area
@@ -695,7 +695,7 @@ void Minimap_loop_functions::MergeClustersIntoSuperClusters() {
  * Find a location in an underexplored area (low cluster count/coverage)
  * Returns a target location in the arena that has minimal cluster coverage
  *****/
-argos::CVector2 Minimap_loop_functions::GetLowClusterSearchLocation() {
+argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 	// If no clusters exist yet, return a random location
 	if(VisitedClusters.empty()) {
 		argos::Real x = RNG->Uniform(ForageRangeX);
@@ -762,8 +762,8 @@ argos::CVector2 Minimap_loop_functions::GetLowClusterSearchLocation() {
 	return argos::CVector2(x, y);
 }
 
-double Minimap_loop_functions::getProbabilityOfSearchingLowClusters() {
+double Cluster_loop_functions::getProbabilityOfSearchingLowClusters() {
 	return ProbabilityOfSearchingLowClusters;
 }
 
-REGISTER_LOOP_FUNCTIONS(Minimap_loop_functions, "Minimap_loop_functions")
+REGISTER_LOOP_FUNCTIONS(Cluster_loop_functions, "Cluster_loop_functions")

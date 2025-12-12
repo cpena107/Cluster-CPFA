@@ -1,7 +1,7 @@
-#include "Minimap_controller.h"
+#include "Cluster_controller.h"
 #include <unistd.h>
 
-Minimap_controller::Minimap_controller() :
+Cluster_controller::Cluster_controller() :
 	RNG(argos::CRandom::CreateRNG("argos")),
 	isInformed(false),
 	isHoldingFood(false),
@@ -10,7 +10,7 @@ Minimap_controller::Minimap_controller() :
 	ResourceDensity(0),
 	MaxTrailSize(50),
 	SearchTime(0),
-	Minimap_state(DEPARTING),
+	Cluster_state(DEPARTING),
 	LoopFunctions(NULL),
 	survey_count(0),
 	isUsingPheromone(0),
@@ -22,7 +22,7 @@ Minimap_controller::Minimap_controller() :
 {
 }
 
-void Minimap_controller::Init(argos::TConfigurationNode &node) {
+void Cluster_controller::Init(argos::TConfigurationNode &node) {
 	compassSensor   = GetSensor<argos::CCI_PositioningSensor>("positioning");
 	wheelActuator   = GetActuator<argos::CCI_DifferentialSteeringActuator>("differential_steering");
 	proximitySensor = GetSensor<argos::CCI_FootBotProximitySensor>("footbot_proximity");
@@ -52,15 +52,15 @@ void Minimap_controller::Init(argos::TConfigurationNode &node) {
     controllerID= GetId();
 }
 
-void Minimap_controller::ControlStep() {
+void Cluster_controller::ControlStep() {
 	/*
 	ofstream log_output_stream;
-	log_output_stream.open("Minimap_log.txt", ios::app);
+	log_output_stream.open("Cluster_log.txt", ios::app);
 
 	// depart from nest after food drop off or simulation start
 	if (isHoldingFood) log_output_stream << "(Carrying) ";
 	
-	switch(Minimap_state)  {
+	switch(Cluster_state)  {
 		case DEPARTING:
 			if (isUsingSiteFidelity) {
 				log_output_stream << "DEPARTING (Fidelity): "
@@ -103,16 +103,16 @@ void Minimap_controller::ControlStep() {
 	previous_position = GetPosition();
 
 	// Record current location in memory when searching (store locally only)
-	if(Minimap_state == SEARCHING && SimulationTick() % (SimulationTicksPerSecond() / 4) == 0) {
+	if(Cluster_state == SEARCHING && SimulationTick() % (SimulationTicksPerSecond() / 4) == 0) {
 		RecordVisitedLocation(GetPosition());
 	}
 
 	//UpdateTargetRayList();
-	Minimap();
+	Cluster();
 	Move();
 }
 
-void Minimap_controller::Reset() {
+void Cluster_controller::Reset() {
 	num_targets_collected = 0;
 
 	/* pheromone trail variables */
@@ -135,17 +135,17 @@ void Minimap_controller::Reset() {
 	isLostResource = false;
 }
 
-bool Minimap_controller::IsHoldingFood() {
+bool Cluster_controller::IsHoldingFood() {
 		return isHoldingFood;
 }
 
-bool Minimap_controller::IsUsingSiteFidelity() {
+bool Cluster_controller::IsUsingSiteFidelity() {
 		return isUsingSiteFidelity;
 }
 
-void Minimap_controller::Minimap() {
+void Cluster_controller::Cluster() {
 	
-	switch(Minimap_state) {
+	switch(Cluster_state) {
 		// depart from nest after food drop off or simulation start
 		case DEPARTING:
 			//argos::LOG << "DEPARTING" << std::endl;
@@ -174,12 +174,12 @@ void Minimap_controller::Minimap() {
 	}
 }
 
-bool Minimap_controller::IsInTheNest() {
+bool Cluster_controller::IsInTheNest() {
 	return ((GetPosition() - LoopFunctions->NestPosition).SquareLength()
 		< LoopFunctions->NestRadiusSquared);
 }
 
-void Minimap_controller::SetLoopFunctions(Minimap_loop_functions* lf) {
+void Cluster_controller::SetLoopFunctions(Cluster_loop_functions* lf) {
 	LoopFunctions = lf;
 
 	// Initialize the SiteFidelityPosition
@@ -195,7 +195,7 @@ void Minimap_controller::SetLoopFunctions(Minimap_loop_functions* lf) {
 	hostname[1023] = '\0';                    
 	gethostname(hostname, 1023);  
 
-	ss << "Minimap-"<<GIT_BRANCH<<"-"<<GIT_COMMIT_HASH<<"-"
+	ss << "Cluster-"<<GIT_BRANCH<<"-"<<GIT_COMMIT_HASH<<"-"
 		<< hostname << '-'
 		<< getpid() << '-'
 		<< (now->tm_year) << '-'
@@ -209,7 +209,7 @@ void Minimap_controller::SetLoopFunctions(Minimap_loop_functions* lf) {
 		results_full_path = results_path+"/"+results_file_name;
 
 	// Only the first robot should do this:	 
-	if (GetId().compare("Minimap_0") == 0) {
+	if (GetId().compare("Cluster_0") == 0) {
 		/*
 		ofstream results_output_stream;
 		results_output_stream.open(results_full_path, ios::app);
@@ -249,14 +249,14 @@ void Minimap_controller::SetLoopFunctions(Minimap_loop_functions* lf) {
 
 }
 
-void Minimap_controller::Departing()
+void Cluster_controller::Departing()
 {
 	argos::Real distanceToTarget = (GetPosition() - GetTarget()).Length();
 	argos::Real randomNumber = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 
 	/*
 	ofstream log_output_stream;
-	log_output_stream.open("Minimap_log.txt", ios::app);
+	log_output_stream.open("Cluster_log.txt", ios::app);
 	log_output_stream << "Distance to target: " << distanceToTarget << endl;
 	log_output_stream << "Current Position: " << GetPosition() << ", Target: " << GetTarget() << endl;
 	log_output_stream.close();
@@ -268,7 +268,7 @@ void Minimap_controller::Departing()
    if(randomNumber < LoopFunctions->ProbabilityOfSwitchingToSearching && GetTarget() != argos::CVector2(0,0)) {
      Stop();
      SearchTime = 0;
-			  Minimap_state = SEARCHING;
+			  Cluster_state = SEARCHING;
 			  argos::Real USV = LoopFunctions->UninformedSearchVariation.GetValue();
 			  argos::Real rand = RNG->Gaussian(USV);
 			  argos::CRadians rotation(rand);
@@ -290,11 +290,11 @@ void Minimap_controller::Departing()
 	if(isInformed && distanceToTarget < TargetDistanceTolerance) {
 	
 		//ofstream log_output_stream;
-		//log_output_stream.open("Minimap_log.txt", ios::app);
+		//log_output_stream.open("Cluster_log.txt", ios::app);
 		//log_output_stream << "Reached waypoint: " << SiteFidelityPosition << endl;
 
 		SearchTime = 0;
-		Minimap_state = SEARCHING;
+		Cluster_state = SEARCHING;
 	
 		if(isUsingSiteFidelity == true) {
 			isUsingSiteFidelity = false;
@@ -309,7 +309,7 @@ void Minimap_controller::Departing()
  * Detect if the robot has lost the resource at the informed location.
  * This is called when searching at an informed site and not finding food.
  *****/
-void Minimap_controller::DetectLostResource() {
+void Cluster_controller::DetectLostResource() {
 	// If we're using site fidelity or informed search and haven't found food after some time
 	if(isInformed && !isHoldingFood && SearchTime > 5) {
 		// Mark that we've lost the resource
@@ -319,7 +319,7 @@ void Minimap_controller::DetectLostResource() {
 	}
 }
 
-void Minimap_controller::Searching() {
+void Cluster_controller::Searching() {
 	// "scan" for food only every half of a second
 	//if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
 		SetHoldingFood();
@@ -349,7 +349,7 @@ void Minimap_controller::Searching() {
              isUsingSiteFidelity = false; 
              updateFidelity = false; 
              isLostResource = false;
-				Minimap_state = RETURNING;
+				Cluster_state = RETURNING;
 			
 				/*
 				ofstream log_output_stream;
@@ -448,13 +448,13 @@ void Minimap_controller::Searching() {
 	// Food has been found, change state to RETURNING and go to the nest
 	//else {
 	//	SetTarget(LoopFunctions->NestPosition);
-	//	Minimap_state = RETURNING;
+	//	Cluster_state = RETURNING;
 	//}
 }
 
 // Cause the robot to rotate in place as if surveying the surrounding targets
 // Turns 36 times by 10 degrees
-void Minimap_controller::Surveying() {
+void Cluster_controller::Surveying() {
 	if (survey_count <= 4) { 
 		CRadians rotation(survey_count*3.14/2); // divide by 10 so the vecot is small and the linear motion is minimized
 		argos::CVector2 turn_vector(SearchStepSize, rotation.SignedNormalize());
@@ -475,7 +475,7 @@ void Minimap_controller::Surveying() {
 	else {
 		SetIsHeadingToNest(true); // Turn off error for this
 		SetTarget(LoopFunctions->NestPosition);
-		Minimap_state = RETURNING;
+		Cluster_state = RETURNING;
 		survey_count = 0; // Reset
 	}
 }
@@ -486,7 +486,7 @@ void Minimap_controller::Surveying() {
  * This state is triggered when a robot has found food or when it has given
  * up on searching and is returning to the nest.
  *****/
-void Minimap_controller::Returning() {
+void Cluster_controller::Returning() {
 	//SetHoldingFood();
 	//SetTarget(LoopFunctions->NestPosition);
 
@@ -525,7 +525,7 @@ void Minimap_controller::Returning() {
 		// Determine probabilistically whether to use site fidelity, pheromone
 		// trails, or random search.
 		//ofstream log_output_stream;
-		//log_output_stream.open("Minimap_log.txt", ios::app);
+		//log_output_stream.open("Cluster_log.txt", ios::app);
 		//log_output_stream << "At the nest." << endl;	    
 		 
 		// use site fidelity
@@ -561,7 +561,7 @@ void Minimap_controller::Returning() {
 		}
 
 		isGivingUpSearch = false;
-		Minimap_state = DEPARTING;   
+		Cluster_state = DEPARTING;   
 		isHoldingFood = false;
 		
 		// If successfully returned with food, clear visited locations for fresh exploration
@@ -578,7 +578,7 @@ void Minimap_controller::Returning() {
 	}		
 }
 
-void Minimap_controller::SetRandomSearchLocation() {
+void Cluster_controller::SetRandomSearchLocation() {
 	argos::Real random_wall = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 	argos::Real x = 0.0, y = 0.0;
 
@@ -611,7 +611,7 @@ void Minimap_controller::SetRandomSearchLocation() {
  * Set target to a location in an underexplored area (low cluster coverage).
  * Uses the loop functions to identify areas with minimal exploration.
  *****/
-void Minimap_controller::SetLowClusterSearchLocation() {
+void Cluster_controller::SetLowClusterSearchLocation() {
 	argos::CVector2 target = LoopFunctions->GetLowClusterSearchLocation();
 	SetIsHeadingToNest(true); // Turn off error for this
 	SetTarget(target);
@@ -622,7 +622,7 @@ void Minimap_controller::SetLowClusterSearchLocation() {
  * the distance tolerance of the position of a food item. If the iAnt has found
  * food then the appropriate boolean flags are triggered.
  *****/
-void Minimap_controller::SetHoldingFood() {
+void Cluster_controller::SetHoldingFood() {
 	// Is the iAnt already holding food?
 	if(IsHoldingFood() == false) {
 		// No, the iAnt isn't holding food. Check if we have found food at our
@@ -631,12 +631,12 @@ void Minimap_controller::SetHoldingFood() {
 		std::vector<argos::CVector2> newFoodList;
 		std::vector<argos::CColor> newFoodColoringList;
 		size_t i = 0, j = 0;
-      if(Minimap_state != RETURNING){
+      if(Cluster_state != RETURNING){
 		for(i = 0; i < LoopFunctions->FoodList.size(); i++) {
 			if((GetPosition() - LoopFunctions->FoodList[i]).SquareLength() < FoodDistanceTolerance ) {
 				// We found food! Calculate the nearby food density.
 				isHoldingFood = true;
-				Minimap_state = SURVEYING;
+				Cluster_state = SURVEYING;
 				j = i + 1;
 				break;
 			} else {
@@ -689,7 +689,7 @@ void Minimap_controller::SetHoldingFood() {
  * produce the ideal result most of the time. This is especially true since
  * item detection is based on distance calculations with circles.
  *****/
-void Minimap_controller::SetLocalResourceDensity() {
+void Cluster_controller::SetLocalResourceDensity() {
 	argos::CVector2 distance;
 
 	// remember: the food we picked up is removed from the foodList before this function call
@@ -717,7 +717,7 @@ void Minimap_controller::SetLocalResourceDensity() {
 	//  Wait(4); // This function is broken. It causes the rover to move in the wrong direction after finishing its local resource density test 
 
 	//ofstream log_output_stream;
-	//log_output_stream.open("Minimap_log.txt", ios::app);
+	//log_output_stream.open("Cluster_log.txt", ios::app);
 	//log_output_stream << "(Survey): " << ResourceDensity << endl;
 	//log_output_stream << "SiteFidelityPosition: " << SiteFidelityPosition << endl;
 	//log_output_stream.close();
@@ -726,7 +726,7 @@ void Minimap_controller::SetLocalResourceDensity() {
 /*****
  * Update the global site fidelity list for graphics display and add a new fidelity position.
  *****/
-void Minimap_controller::SetFidelityList(argos::CVector2 newFidelity) {
+void Cluster_controller::SetFidelityList(argos::CVector2 newFidelity) {
 	std::vector<argos::CVector2> newFidelityList;
 
 	/* Remove this robot's old fidelity position from the fidelity list. */
@@ -750,7 +750,7 @@ void Minimap_controller::SetFidelityList(argos::CVector2 newFidelity) {
 /*****
  * Update the global site fidelity list for graphics display and remove the old fidelity position.
  *****/
-void Minimap_controller::SetFidelityList() {
+void Cluster_controller::SetFidelityList() {
 	std::vector<argos::CVector2> newFidelityList;
 
 	/* Remove this robot's old fidelity position from the fidelity list. */
@@ -770,7 +770,7 @@ void Minimap_controller::SetFidelityList() {
  * return TRUE:  pheromone was successfully targeted
  *        FALSE: pheromones don't exist or are all inactive
  *****/
-bool Minimap_controller::SetTargetPheromone() {
+bool Cluster_controller::SetTargetPheromone() {
 	argos::Real maxStrength = 0.0, randomWeight = 0.0;
 	bool isPheromoneSet = false;
 
@@ -809,7 +809,7 @@ bool Minimap_controller::SetTargetPheromone() {
 	}
 
 	//ofstream log_output_stream;
-	//log_output_stream.open("Minimap_log.txt", ios::app);
+	//log_output_stream.open("Cluster_log.txt", ios::app);
 	//log_output_stream << "Found: " << LoopFunctions->PheromoneList.size()  << " waypoints." << endl;
 	//log_output_stream << "Follow waypoint?: " << isPheromoneSet << endl;
 	//log_output_stream.close();
@@ -820,7 +820,7 @@ bool Minimap_controller::SetTargetPheromone() {
 /*****
  * Calculate and return the exponential decay of "value."
  *****/
-argos::Real Minimap_controller::GetExponentialDecay(argos::Real value, argos::Real time, argos::Real lambda) {
+argos::Real Cluster_controller::GetExponentialDecay(argos::Real value, argos::Real time, argos::Real lambda) {
 	/* convert time into units of haLoopFunctions-seconds from simulation frames */
 	//time = time / (LoopFunctions->TicksPerSecond / 2.0);
 
@@ -833,7 +833,7 @@ argos::Real Minimap_controller::GetExponentialDecay(argos::Real value, argos::Re
 /*****
  * Provides a bound on the value by rolling over a la modulo.
  *****/
-argos::Real Minimap_controller::GetBound(argos::Real value, argos::Real min, argos::Real max) {
+argos::Real Cluster_controller::GetBound(argos::Real value, argos::Real min, argos::Real max) {
 	/* Calculate an offset. */
 	argos::Real offset = std::abs(min) + std::abs(max);
 
@@ -854,7 +854,7 @@ argos::Real Minimap_controller::GetBound(argos::Real value, argos::Real min, arg
 /*****
  * Return the Poisson cumulative probability at a given k and lambda.
  *****/
-argos::Real Minimap_controller::GetPoissonCDF(argos::Real k, argos::Real lambda) {
+argos::Real Cluster_controller::GetPoissonCDF(argos::Real k, argos::Real lambda) {
 	argos::Real sumAccumulator       = 1.0;
 	argos::Real factorialAccumulator = 1.0;
 
@@ -866,7 +866,7 @@ argos::Real Minimap_controller::GetPoissonCDF(argos::Real k, argos::Real lambda)
 	return (exp(-lambda) * sumAccumulator);
 }
 
-void Minimap_controller::UpdateTargetRayList() {
+void Cluster_controller::UpdateTargetRayList() {
 	if(SimulationTick() % LoopFunctions->DrawDensityRate == 0 && LoopFunctions->DrawTargetRays == 1) {
 		/* Get position values required to construct a new ray */
 		argos::CVector2 t(GetTarget());
@@ -899,7 +899,7 @@ void Minimap_controller::UpdateTargetRayList() {
  * Record a location in the robot's memory of visited locations.
  * This helps the robot avoid searching the same areas repeatedly.
  *****/
-void Minimap_controller::RecordVisitedLocation(argos::CVector2 location) {
+void Cluster_controller::RecordVisitedLocation(argos::CVector2 location) {
 	// Check if this location is already in memory (within tolerance)
 	if(!HasVisitedLocation(location, VisitedLocationTolerance)) {
 		VisitedLocations.push_back(location);
@@ -915,7 +915,7 @@ void Minimap_controller::RecordVisitedLocation(argos::CVector2 location) {
  * Check if a location has been visited before within a given tolerance.
  * Returns true if the location is in the visited memory.
  *****/
-bool Minimap_controller::HasVisitedLocation(argos::CVector2 location, argos::Real tolerance) {
+bool Cluster_controller::HasVisitedLocation(argos::CVector2 location, argos::Real tolerance) {
 	argos::Real toleranceSquared = tolerance * tolerance;
 	
 	for(size_t i = 0; i < VisitedLocations.size(); i++) {
@@ -931,7 +931,7 @@ bool Minimap_controller::HasVisitedLocation(argos::CVector2 location, argos::Rea
  * Set a search location that hasn't been visited before.
  * If all areas have been visited, fall back to random search.
  *****/
-void Minimap_controller::SetUnvisitedSearchLocation() {
+void Cluster_controller::SetUnvisitedSearchLocation() {
 	const size_t MAX_ATTEMPTS = 50;
 	size_t attempts = 0;
 	argos::Real x, y;
@@ -990,7 +990,7 @@ void Minimap_controller::SetUnvisitedSearchLocation() {
  * This information can potentially be shared with other robots.
  * For now, this is a placeholder that could be extended to share memory between robots.
  *****/
-void Minimap_controller::ShareVisitedLocationsWithNest() {
+void Cluster_controller::ShareVisitedLocationsWithNest() {
 	// Share all visited locations from this robot's memory with the global list
 	// This happens when the robot successfully returns to the nest with food
 	for(const auto& location : VisitedLocations) {
@@ -1004,9 +1004,9 @@ void Minimap_controller::ShareVisitedLocationsWithNest() {
 /*****
  * Clear the memory of visited locations. Called when starting a fresh search.
  *****/
-void Minimap_controller::ClearVisitedLocations() {
+void Cluster_controller::ClearVisitedLocations() {
 	VisitedLocations.clear();
 	isLostResource = false;
 }
 
-REGISTER_CONTROLLER(Minimap_controller, "Minimap_controller")
+REGISTER_CONTROLLER(Cluster_controller, "Cluster_controller")

@@ -4,7 +4,7 @@ else()
 endif()
 
 add_subdirectory(Base)
-add_subdirectory(Minimap)
+add_subdirectory(Cluster)
 add_subdirectory(CPFA)
 
 

@@ -1,9 +1,9 @@
 #!/bin/bash
-#if [ "$1" = "clean" ]; then
+if [ "$1" = "clean" ]; then
     echo "Deleting and recreating the build directory "
     rm -rf build
     mkdir build
-#fi
+fi
 
 cd build
 

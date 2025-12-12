@@ -1,18 +1,18 @@
-#include "Minimap_qt_user_functions.h"
+#include "Cluster_qt_user_functions.h"
 
 /*****
  * Constructor: In order for drawing functions in this class to be used by
  * ARGoS it must be registered using the RegisterUserFunction function.
  *****/
-Minimap_qt_user_functions::Minimap_qt_user_functions() :
-	loopFunctions(dynamic_cast<Minimap_loop_functions&>(CSimulator::GetInstance().GetLoopFunctions()))
+Cluster_qt_user_functions::Cluster_qt_user_functions() :
+	loopFunctions(dynamic_cast<Cluster_loop_functions&>(CSimulator::GetInstance().GetLoopFunctions()))
 {
-	RegisterUserFunction<Minimap_qt_user_functions, CFootBotEntity>(&Minimap_qt_user_functions::DrawOnRobot);
-	RegisterUserFunction<Minimap_qt_user_functions, CFloorEntity>(&Minimap_qt_user_functions::DrawOnArena);
+	RegisterUserFunction<Cluster_qt_user_functions, CFootBotEntity>(&Cluster_qt_user_functions::DrawOnRobot);
+	RegisterUserFunction<Cluster_qt_user_functions, CFloorEntity>(&Cluster_qt_user_functions::DrawOnArena);
 }
 
-void Minimap_qt_user_functions::DrawOnRobot(CFootBotEntity& entity) {
-	Minimap_controller& c = dynamic_cast<Minimap_controller&>(entity.GetControllableEntity().GetController());
+void Cluster_qt_user_functions::DrawOnRobot(CFootBotEntity& entity) {
+	Cluster_controller& c = dynamic_cast<Cluster_controller&>(entity.GetControllableEntity().GetController());
 
 	if(c.IsHoldingFood() == true) {
 		DrawCylinder(CVector3(0.0, 0.0, 0.3), CQuaternion(), loopFunctions.FoodRadius, 0.025, CColor::BLACK);
@@ -44,7 +44,7 @@ void Minimap_qt_user_functions::DrawOnRobot(CFootBotEntity& entity) {
 	}
 }
  
-void Minimap_qt_user_functions::DrawOnArena(CFloorEntity& entity) {
+void Cluster_qt_user_functions::DrawOnArena(CFloorEntity& entity) {
 	DrawFood();
 	DrawFidelity();
 	DrawPheromones();
@@ -58,7 +58,7 @@ void Minimap_qt_user_functions::DrawOnArena(CFloorEntity& entity) {
  * This function is called by the DrawOnArena(...) function. If the iAnt_data
  * object is not initialized this function should not be called.
  *****/
-void Minimap_qt_user_functions::DrawNest() {
+void Cluster_qt_user_functions::DrawNest() {
 	/* 2d cartesian coordinates of the nest */
 	Real x_coordinate = loopFunctions.NestPosition.GetX();
 	Real y_coordinate = loopFunctions.NestPosition.GetX();
@@ -73,7 +73,7 @@ void Minimap_qt_user_functions::DrawNest() {
 	DrawCircle(nest_3d, CQuaternion(), loopFunctions.NestRadius, CColor::GRAY50);
 }
 
-void Minimap_qt_user_functions::DrawFood() {
+void Cluster_qt_user_functions::DrawFood() {
 
 	Real x, y;
 
@@ -84,7 +84,7 @@ void Minimap_qt_user_functions::DrawFood() {
 	}
 }
 
-void Minimap_qt_user_functions::DrawFidelity() {
+void Cluster_qt_user_functions::DrawFidelity() {
 
 	Real x, y;
         for(map<string, CVector2>::iterator it= loopFunctions.FidelityList.begin(); it!=loopFunctions.FidelityList.end(); ++it) {
@@ -94,7 +94,7 @@ void Minimap_qt_user_functions::DrawFidelity() {
 	}
 }
 
-void Minimap_qt_user_functions::DrawPheromones() {
+void Cluster_qt_user_functions::DrawPheromones() {
 
 	Real x, y, weight;
 	vector<CVector2> trail;
@@ -140,7 +140,7 @@ void Minimap_qt_user_functions::DrawPheromones() {
 	}
 }
 
-void Minimap_qt_user_functions::DrawTargetRays() {
+void Cluster_qt_user_functions::DrawTargetRays() {
 	//size_t tick = loopFunctions.GetSpace().GetSimulationClock();
 	//size_t tock = loopFunctions.GetSimulator().GetPhysicsEngine("default").GetInverseSimulationClockTick() / 8;
 
@@ -153,7 +153,7 @@ void Minimap_qt_user_functions::DrawTargetRays() {
 	//}
 }
 
-void Minimap_qt_user_functions::DrawVisitedLocations() {
+void Cluster_qt_user_functions::DrawVisitedLocations() {
 	// Draw merged clusters as larger magenta dots, or individual yellow dots
 	Real x, y;
 	
@@ -201,7 +201,7 @@ void Minimap_qt_user_functions::DrawVisitedLocations() {
 }
 
 /*
-void Minimap_qt_user_functions::DrawTargetRays() {
+void Cluster_qt_user_functions::DrawTargetRays() {
 
 	CColor c = CColor::BLUE;
 
@@ -210,10 +210,10 @@ void Minimap_qt_user_functions::DrawTargetRays() {
 	}
 
 	//if(loopFunctions.SimTime % (loopFunctions.TicksPerSecond * 10) == 0) {
-		// comment out for DSA, uncomment for Minimap
+		// comment out for DSA, uncomment for Cluster
 		loopFunctions.TargetRayList.clear();
 	//}
 }
 */
 
-REGISTER_QTOPENGL_USER_FUNCTIONS(Minimap_qt_user_functions, "Minimap_qt_user_functions")
+REGISTER_QTOPENGL_USER_FUNCTIONS(Cluster_qt_user_functions, "Cluster_qt_user_functions")
