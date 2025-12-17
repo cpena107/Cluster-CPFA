@@ -132,7 +132,7 @@ void Cluster_controller::Reset() {
 	
 	/* Clear visited locations memory */
 	VisitedLocations.clear();
-	isLostResource = false;
+	//isLostResource = false;
 }
 
 bool Cluster_controller::IsHoldingFood() {
