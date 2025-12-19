@@ -1,19 +1,18 @@
-# CPFA-ARGoS
+# ClusterMap-CPFA-ARGoS
 
 ARGoS (Autonomous Robots Go Swarming) is a multi-physics robot simulator. iAnt-ARGoS is an extension to ARGoS that implements the CPFA-ARGoS algorithm and provides a mechanism for performing experiments with iAnts.
 
 ### Updates
-This project was forked from [BCLab-UNM](https://github.com/BCLab-UNM/CPFA-ARGoS) and updated. The project has been tested with the `CPFAExample.xml` in the `/experiments` folder. You can follow the installation guide below to install and run the updated system.
+This project was forked from [MARSLab-UTRGV](https://github.com/MARSLab-UTRGV/CPFA-ARGoS) and updated. The project has been tested with the `CPFA_ClusterMap_random.xml` in the `/experiments` folder. You can follow the installation guide below to install and run the updated system.
 
 ---
 
 ### Quick Start Installation Guide
 
 The CPFA-ARGoS system has two components: 
-1. The **CPFA logic controllers** that implement the CPFA algorithm in the ARGoS robot simulator.
-2. The **Genetic Algorithm** that evolves the parameters used by the CPFA algorithm.
+1. The **Cluster logic controllers** that implement the ClusterMap-CPFA algorithm in the ARGoS robot simulator.
 
-You can run the CPFA algorithm on ARGoS using OS X or Linux (see installation instructions below). To run the evolver, you must use the Moses MPI cluster, which has 6 hosts with 24 cores. You can also use the cluster to run experiments without tying up your local machine.
+You can run the ClusterMap-CPFA algorithm on ARGoS using OS X or Linux (see installation instructions below). 
 
 ---
 
@@ -110,7 +109,7 @@ The evolver takes an experiment XML file as an argument that specifies the simul
 To run an experiment, launch ARGoS with the XML configuration file for your system:
 
 ```bash
-$ argos3 -c experiments/CPFAExample.xml
+$ argos3 -c experiments/CPFA_ClusterMap_random.xml
 ```
 
 ---

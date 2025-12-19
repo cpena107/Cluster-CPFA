@@ -16,8 +16,8 @@
   <!-- *************** -->
   <controllers>
 
-    <CPFA_controller id="CPFA"
-                     library="build/source/CPFA/libCPFA_controller">
+    <Cluster_controller id="Cluster"
+                     library="build/source/Cluster/libCluster_controller">
       <actuators>
         <differential_steering implementation = "default"/>
       </actuators>
@@ -43,19 +43,21 @@
                   RobotRotationSpeed                = "8.0"
 		  DestinationNoiseStdev             = "0.0"
 		  PositionNoiseStdev             = "0.00"
+		  VisitedLocationTolerance          = "0.3"
 		  ResultsDirectoryPath              = "results/"/>
       </params>
 
-    </CPFA_controller>
+    </Cluster_controller>
 
   </controllers>
 
-  <loop_functions library = "build/source/CPFA/libCPFA_loop_functions"
-                  label   = "CPFA_loop_functions">
+  <loop_functions library = "build/source/Cluster/libCluster_loop_functions"
+                  label   = "Cluster_loop_functions">
 
     <!-- evolvable parameters -->
-        <CPFA       ProbabilityOfSwitchingToSearching = "0.504"
+        <Cluster       ProbabilityOfSwitchingToSearching = "0.504"
                     ProbabilityOfReturningToNest      = "0.001"
+                    ProbabilityOfSearchingLowClusters = "0.3"
                     UninformedSearchVariation         = "7.0"
                     RateOfInformedSearchDecay         = "0.28"
                     RateOfSiteFidelity                = "4.27"
@@ -74,7 +76,7 @@
                     DrawTrails = "0"
                     DrawTargetRays = "0"
                     FoodDistribution = "2"
-                    FoodItemCount = "1000"
+                    FoodItemCount = "256"
                     NumberOfClusters = "4"
                     ClusterWidthX = "8"
                     ClusterLengthY = "8"
@@ -100,8 +102,8 @@
                 layout="2, 3, 1" />
       <orientation method="constant" values="0.0, 0.0, 0.0" />
       <entity quantity="6" max_trials="100">
-        <foot-bot id="CPFA_">
-          <controller config="CPFA"/>
+        <foot-bot id="Cluster_">
+          <controller config="Cluster"/>
         </foot-bot>
       </entity>
     </distribute>
@@ -136,7 +138,7 @@
             <placement index="5" position="-3,0,2" look_at="1,0,0" up="1,0,0" lens_focal_length="35"/>
           </placements>
         </camera>
-        <user_functions label="CPFA_qt_user_functions"/>
+        <user_functions label="Cluster_qt_user_functions"/>
     </qt-opengl>
 
   </visualization>

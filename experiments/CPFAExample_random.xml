@@ -6,8 +6,8 @@
   <!-- ************************* -->
   <framework>
     <system threads="0" />
-    <experiment length="1800"
-                ticks_per_second="32"
+    <experiment length="16000"
+                ticks_per_second="16"
 		random_seed="0"/>
   </framework>
 
@@ -61,27 +61,28 @@
                     RateOfSiteFidelity                = "4.27"
                     RateOfLayingPheromone             = "3.75"
                     RateOfPheromoneDecay              = "0.03"
-		    PrintFinalScore = "1"
+		                PrintFinalScore = "1"
 		    />
 
-         <settings
-	     MaxSimTimeInSeconds = "3600"
-	     MaxSimCounter = "1"
-	     VariableFoodPlacement = "0"
-	     OutputData = "0"
-	     DrawDensityRate = "4"
-	     DrawIDs = "1"
-	     DrawTrails = "1"
-	     DrawTargetRays = "1"
-	     FoodDistribution = "2"
-	     FoodItemCount = "512"
-	     NumberOfClusters = "4"
-	     ClusterWidthX = "8"
-	     ClusterLengthY = "8"
-	     PowerRank = "4"
-	     FoodRadius = "0.05"
-	     NestRadius = "0.25"
-	     NestElevation = "0.01"/>
+        <settings
+                    MaxSimTimeInSeconds = "3600"
+                    MaxSimCounter = "1"
+                    VariableFoodPlacement = "0"
+                    OutputData = "0"
+                    DrawDensityRate = "4"
+                    DrawIDs = "1"
+                    DrawTrails = "0"
+                    DrawTargetRays = "0"
+                    FoodDistribution = "0"
+                    FoodItemCount = "256"
+                    NumberOfClusters = "4"
+                    ClusterWidthX = "8"
+                    ClusterLengthY = "8"
+                    PowerRank = "4"
+                    FoodRadius = "0.05"
+                    NestRadius = "0.25"
+                    NestElevation = "0.01"
+          />
 
   </loop_functions>
 
@@ -122,15 +123,23 @@
   <!-- ****************** -->
   <!-- * Visualization * -->
   <!-- ****************** -->
+  <!--
   <visualization>
 
-<qt-opengl>
-      <camera>
-        <placement idx="0" position="  0, 0, 10" look_at="0, 0, 0" lens_focal_length="25"/>
-      </camera>
-      <user_functions label="CPFA_qt_user_functions"/>
+    <qt-opengl>
+        <camera>
+          <placements>
+            <placement index="0" position="0,0,13" look_at="0,0,0" up="0,1,0" lens_focal_length="35"/>
+            <placement index="1" position="0,-9,5" look_at="0,0,0" up="0,1,0" lens_focal_length="35"/>
+            <placement index="2" position="0,9,5" look_at="0,0,0" up="0,-1,0" lens_focal_length="35"/>
+            <placement index="3" position="4,0,5" look_at="0,0,0" up="-1,0,0" lens_focal_length="20"/>
+            <placement index="4" position="-4,0,5" look_at="0,0,0" up="1,0,0" lens_focal_length="20"/>
+            <placement index="5" position="-3,0,2" look_at="1,0,0" up="1,0,0" lens_focal_length="35"/>
+          </placements>
+        </camera>
+        <user_functions label="CPFA_qt_user_functions"/>
     </qt-opengl>
 
   </visualization>
-
+-->
 </argos-configuration>

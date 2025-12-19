@@ -14,7 +14,7 @@ Cluster_controller::Cluster_controller() :
 	LoopFunctions(NULL),
 	survey_count(0),
 	isUsingPheromone(0),
-    SiteFidelityPosition(1000, 1000),
+    SiteFidelityPosition(1000, 1000), 
     updateFidelity(false),
     VisitedLocationTolerance(0.3),
     MaxVisitedLocations(1000),

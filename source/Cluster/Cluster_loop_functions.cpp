@@ -115,7 +115,7 @@ void Cluster_loop_functions::Reset() {
 	GetSpace().GetFloorEntity().Reset();
 	MaxSimCounter = SimCounter;
 	SimCounter = 0;
-  score = 0.0;
+  	score = 0.0;
 
 	FoodList.clear();
 	FoodColoringList.clear();
@@ -530,7 +530,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	std::vector<bool> assigned(VisitedLocations.size(), false);
 
 	for(size_t i = 0; i < VisitedLocations.size(); ++i) {
-		if(assigned[i]) continue;
+		if(assigned[i]) continue; // Already assigned to a cluster
 
 		// Start a new cluster with point i
 		std::vector<size_t> members;
@@ -553,6 +553,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			sumX += VisitedLocations[idx].GetX();
 			sumY += VisitedLocations[idx].GetY();
 		}
+		// Create VisitedCluster object 
 		argos::CVector2 centroid(sumX / members.size(), sumY / members.size());
 
 		VisitedCluster vc(centroid, clusterWidth, clusterHeight);
@@ -588,7 +589,7 @@ argos::Real Cluster_loop_functions::CalculateClusterCoverage(const VisitedCluste
  * Merge clusters into bigger super-clusters when combined area exceeds 40% of potential merged cluster
  *****/
 void Cluster_loop_functions::MergeClustersIntoSuperClusters() {
-	if(VisitedClusters.size() < 2) return;
+	if(VisitedClusters.size() < 2) return; // Nothing to merge
 
 	// Calculate arena area
 	argos::Real arenaWidth = ForageRangeX.GetMax() - ForageRangeX.GetMin();
@@ -602,7 +603,7 @@ void Cluster_loop_functions::MergeClustersIntoSuperClusters() {
 		std::vector<bool> merged(VisitedClusters.size(), false);
 
 		for(size_t i = 0; i < VisitedClusters.size(); ++i) {
-			if(merged[i]) continue;
+			if(merged[i]) continue; // Already merged
 
 			// Try to find clusters to merge with i
 			std::vector<size_t> members;
@@ -678,7 +679,7 @@ void Cluster_loop_functions::MergeClustersIntoSuperClusters() {
 
 		VisitedClusters = newClusters;
 
-		// Check if largest cluster covers the arena
+		// Check if largest cluster covers the arena this is to stop infinite merging
 		argos::Real largestArea = 0.0;
 		argos::Real arenaWidth = ForageRangeX.GetMax() - ForageRangeX.GetMin();
 		argos::Real arenaHeight = ForageRangeY.GetMax() - ForageRangeY.GetMin();
@@ -704,7 +705,7 @@ argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 	}
 
 	// Grid-based sampling to find underexplored areas
-	const int gridSize = 10; // Divide arena into 10x10 grid
+	const int gridSize = 100; // Divide arena into 10x10 grid
 	argos::Real arenaWidth = ForageRangeX.GetMax() - ForageRangeX.GetMin();
 	argos::Real arenaHeight = ForageRangeY.GetMax() - ForageRangeY.GetMin();
 	argos::Real cellWidth = arenaWidth / gridSize;

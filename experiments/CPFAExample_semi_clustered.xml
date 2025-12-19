@@ -73,8 +73,8 @@
                     DrawIDs = "1"
                     DrawTrails = "0"
                     DrawTargetRays = "0"
-                    FoodDistribution = "0"
-                    FoodItemCount = "100"
+                    FoodDistribution = "2"
+                    FoodItemCount = "256"
                     NumberOfClusters = "4"
                     ClusterWidthX = "8"
                     ClusterLengthY = "8"
@@ -122,7 +122,7 @@
 
   <!-- ****************** -->
   <!-- * Visualization * -->
-  <!-- ****************** -->
+  <!-- ****************** 
   <visualization>
 
     <qt-opengl>
@@ -140,5 +140,5 @@
     </qt-opengl>
 
   </visualization>
-
+-->
 </argos-configuration>
