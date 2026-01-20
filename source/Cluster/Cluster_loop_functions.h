@@ -110,6 +110,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		std::vector<Pheromone>   PheromoneList;
 		std::vector<argos::CRay3>    TargetRayList;
 		std::vector<argos::CVector2> VisitedLocations;
+		size_t LastProcessedLocationIndex;
 
 		/* Cluster structure for visited locations */
 		struct VisitedCluster {
@@ -129,6 +130,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 
         size_t currNumCollectedFood;
         size_t Num_robots;
+        size_t RobotsReturnedToNest;
         vector<size_t>			ForageList;
 		argos::CVector2 NestPosition;
 
@@ -142,6 +144,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		bool IsCollidingWithNest(argos::CVector2 p);
 		bool IsCollidingWithFood(argos::CVector2 p);
 		void MergeClustersIntoSuperClusters();
+		void MergeTriangularSuperClusters();
 		argos::Real CalculateClusterCoverage(const VisitedCluster& cluster);
 		double score;
 		int PrintFinalScore;

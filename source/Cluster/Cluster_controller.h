@@ -105,6 +105,15 @@ class Cluster_controller : public BaseController {
 	argos::Real VisitedLocationTolerance;
 	size_t MaxVisitedLocations;
 	bool isLostResource;
+
+	/* Spiral search variables */
+	void SetSpiralSearchLocation();
+	bool isSpiralSearching;
+	size_t spiralPathIndex;
+	argos::CVector2 spiralCenter;
+	argos::Real spiralRadius;
+    argos::Real spiralStepAngle;
+    argos::Real spiralGrowthRate;
 };
 
 #endif /* Cluster_CONTROLLER_H */

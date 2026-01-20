@@ -17,8 +17,13 @@ Cluster_controller::Cluster_controller() :
     SiteFidelityPosition(1000, 1000), 
     updateFidelity(false),
     VisitedLocationTolerance(0.3),
-    MaxVisitedLocations(1000),
-    isLostResource(false)
+    MaxVisitedLocations(100),
+    isLostResource(false),
+	isSpiralSearching(false),
+	spiralPathIndex(0),
+	spiralRadius(0.0),
+    spiralStepAngle(0.3), // Approx 17 degrees
+    spiralGrowthRate(0.01) // Small outward growth
 {
 }
 
@@ -133,6 +138,9 @@ void Cluster_controller::Reset() {
 	/* Clear visited locations memory */
 	VisitedLocations.clear();
 	//isLostResource = false;
+	
+	isSpiralSearching = false;
+	spiralPathIndex = 0;
 }
 
 bool Cluster_controller::IsHoldingFood() {
@@ -314,8 +322,17 @@ void Cluster_controller::DetectLostResource() {
 	if(isInformed && !isHoldingFood && SearchTime > 5) {
 		// Mark that we've lost the resource
 		isLostResource = true;
-		// Switch to uninformed search of unvisited areas
-		isInformed = false;
+		
+		// Start spiral search at the location where we expected food
+		if(!isSpiralSearching) {
+		    isSpiralSearching = true;
+		    spiralCenter = GetPosition(); // Center spiral on current location (where resource was expected)
+		    spiralPathIndex = 0;
+		    spiralGrowthRate = 0.05; // Adjust growth rate as needed
+		}
+		
+		// Don't switch to uninformed search immediately if we are spiraling
+		// isInformed = false; 
 	}
 }
 
@@ -361,9 +378,13 @@ void Cluster_controller::Searching() {
 				return;
 			}
 
-			// If resource was lost, prioritize unvisited locations
+			// If resource was lost, prioritize spiral search or unvisited locations
 			if(isLostResource == true) {
-				SetUnvisitedSearchLocation();
+			    if(isSpiralSearching) {
+			        SetSpiralSearchLocation();
+			    } else {
+    				SetUnvisitedSearchLocation();
+			    }
 				return;
 			}
 
@@ -567,6 +588,7 @@ void Cluster_controller::Returning() {
 		// If successfully returned with food, clear visited locations for fresh exploration
 		if(!isLostResource) {
 			ClearVisitedLocations();
+			isSpiralSearching = false; // Reset spiral state
 		}
 
 		//log_output_stream.close();
@@ -634,9 +656,9 @@ void Cluster_controller::SetHoldingFood() {
       if(Cluster_state != RETURNING){
 		for(i = 0; i < LoopFunctions->FoodList.size(); i++) {
 			if((GetPosition() - LoopFunctions->FoodList[i]).SquareLength() < FoodDistanceTolerance ) {
-				// We found food! Calculate the nearby food density.
+				// We found food! Return immediately to the nest.
 				isHoldingFood = true;
-				Cluster_state = SURVEYING;
+				Cluster_state = RETURNING;
 				j = i + 1;
 				break;
 			} else {
@@ -997,8 +1019,8 @@ void Cluster_controller::ShareVisitedLocationsWithNest() {
 		LoopFunctions->VisitedLocations.push_back(location);
 	}
 	
-	// Trigger cluster update now that new locations have been shared
-	LoopFunctions->UpdateVisitedClusters();
+	// Note: Cluster updates now happen automatically in PostStep() every 5 seconds
+	// No need to track robot returns here anymore
 }
 
 /*****
@@ -1007,6 +1029,56 @@ void Cluster_controller::ShareVisitedLocationsWithNest() {
 void Cluster_controller::ClearVisitedLocations() {
 	VisitedLocations.clear();
 	isLostResource = false;
+}
+
+/*****
+ * Set target for spiral search pattern around a central point.
+ * Used when returning to a visited location/pheromone without finding food immediately.
+ *****/
+void Cluster_controller::SetSpiralSearchLocation() {
+    argos::Real maxRadius = 0.5; // Default max radius if no super cluster found
+    
+    // Find if we are near a super cluster to determine radius
+    if(LoopFunctions != NULL) {
+        for(const auto& cluster : LoopFunctions->VisitedClusters) {
+            if(cluster.isMerged) {
+                argos::Real dist = (GetPosition() - cluster.center).Length();
+                argos::Real clusterR = std::max(cluster.width, cluster.height) / 2.0;
+                
+                // If we are within or near this super cluster
+                if(dist < clusterR * 1.5) {
+                    maxRadius = clusterR;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Calculate next spiral point
+    // parametric equation for spiral: x = (a + b*theta) * cos(theta), y = (a + b*theta) * sin(theta)
+    // where a is start radius, b is growth rate
+    
+    argos::Real angle = spiralPathIndex * spiralStepAngle;
+    argos::Real currentRadius = spiralGrowthRate * angle; // Archimedian spiral starting from center
+    
+    // Reset if we exceed the super cluster radius
+    if(currentRadius > maxRadius) {
+        isSpiralSearching = false;
+        spiralPathIndex = 0;
+        // Fall back to random search or other behavior
+        SetRandomSearchLocation();
+        return;
+    }
+    
+    argos::CVector2 offset(currentRadius, argos::CRadians(angle));
+    argos::CVector2 target = spiralCenter + offset;
+    
+    // Check bounds
+    // Clamp to arena bounds if needed (omitted for brevity, controller's Move() might handle collisions)
+    
+    SetIsHeadingToNest(false);
+    SetTarget(target);
+    spiralPathIndex++;
 }
 
 REGISTER_CONTROLLER(Cluster_controller, "Cluster_controller")
