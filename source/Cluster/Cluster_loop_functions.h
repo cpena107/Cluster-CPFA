@@ -83,6 +83,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		size_t FoodDistribution;
 		size_t FoodItemCount;
 		size_t NumberOfClusters;
+		size_t MaxClusterCount;
 		size_t ClusterWidthX;
 		size_t ClusterLengthY;
 		size_t PowerRank;
@@ -115,13 +116,12 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		/* Cluster structure for visited locations */
 		struct VisitedCluster {
 			argos::CVector2 center;
-			argos::Real width;
-			argos::Real height;
+			argos::Real radius;
 			size_t visitCount;
 			bool isMerged;
 			
-			VisitedCluster(argos::CVector2 c, argos::Real w, argos::Real h) 
-				: center(c), width(w), height(h), visitCount(0), isMerged(false) {}
+			VisitedCluster(argos::CVector2 c, argos::Real r) 
+				: center(c), radius(r), visitCount(0), isMerged(false) {}
 		};
 		std::vector<VisitedCluster> VisitedClusters;
 

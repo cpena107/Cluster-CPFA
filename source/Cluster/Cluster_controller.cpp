@@ -17,7 +17,7 @@ Cluster_controller::Cluster_controller() :
     SiteFidelityPosition(1000, 1000), 
     updateFidelity(false),
     VisitedLocationTolerance(0.3),
-    MaxVisitedLocations(100),
+    MaxVisitedLocations(40),
     isLostResource(false),
 	isSpiralSearching(false),
 	spiralPathIndex(0),
@@ -25,6 +25,8 @@ Cluster_controller::Cluster_controller() :
     spiralStepAngle(0.3), // Approx 17 degrees
     spiralGrowthRate(0.01) // Small outward growth
 {
+	// Start in SEARCHING state instead of DEPARTING
+	Cluster_state = SEARCHING;
 }
 
 void Cluster_controller::Init(argos::TConfigurationNode &node) {
@@ -52,8 +54,10 @@ void Cluster_controller::Init(argos::TConfigurationNode &node) {
 	SetStartPosition(argos::CVector3(p.GetX(), p.GetY(), 0.0));
 
 	FoodDistanceTolerance *= FoodDistanceTolerance;
-	SetIsHeadingToNest(true);
-	SetTarget(argos::CVector2(0,0));
+	// Start searching immediately with random location
+	SetIsHeadingToNest(false);
+	SetRandomSearchLocation();
+	isInformed = false;
     controllerID= GetId();
 }
 
@@ -1039,11 +1043,11 @@ void Cluster_controller::SetSpiralSearchLocation() {
     argos::Real maxRadius = 0.5; // Default max radius if no super cluster found
     
     // Find if we are near a super cluster to determine radius
-    if(LoopFunctions != NULL) {
+    /*if(LoopFunctions != NULL) {
         for(const auto& cluster : LoopFunctions->VisitedClusters) {
             if(cluster.isMerged) {
                 argos::Real dist = (GetPosition() - cluster.center).Length();
-                argos::Real clusterR = std::max(cluster.width, cluster.height) / 2.0;
+                argos::Real clusterR = cluster.radius;
                 
                 // If we are within or near this super cluster
                 if(dist < clusterR * 1.5) {
@@ -1052,7 +1056,7 @@ void Cluster_controller::SetSpiralSearchLocation() {
                 }
             }
         }
-    }
+    }*/
     
     // Calculate next spiral point
     // parametric equation for spiral: x = (a + b*theta) * cos(theta), y = (a + b*theta) * sin(theta)

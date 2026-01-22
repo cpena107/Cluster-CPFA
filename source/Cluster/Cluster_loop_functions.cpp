@@ -16,6 +16,7 @@ Cluster_loop_functions::Cluster_loop_functions() :
 	FoodDistribution(2),
 	FoodItemCount(256),
 	NumberOfClusters(4),
+	MaxClusterCount(0),
 	ClusterWidthX(8),
 	ClusterLengthY(8),
 	PowerRank(4),
@@ -118,6 +119,7 @@ void Cluster_loop_functions::Reset() {
 	MaxSimCounter = SimCounter;
 	SimCounter = 0;
   	score = 0.0;
+	MaxClusterCount = 0;
   	RobotsReturnedToNest = 0;
   	LastProcessedLocationIndex = 0;
 
@@ -165,6 +167,9 @@ void Cluster_loop_functions::PostStep() {
 	size_t ticksPerUpdate = GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick() * 5;
 	if(GetSpace().GetSimulationClock() % ticksPerUpdate == 0 && !VisitedLocations.empty()) {
 		UpdateVisitedClusters();
+		if (VisitedClusters.size() > MaxClusterCount) {
+			MaxClusterCount = VisitedClusters.size();
+		}
 	}
 }
 
@@ -191,7 +196,7 @@ bool Cluster_loop_functions::IsExperimentFinished() {
 }
 
 void Cluster_loop_functions::PostExperiment() {
-	if (PrintFinalScore == 1) printf("%f, %f\n", getSimTimeInSeconds(), score);
+	if (PrintFinalScore == 1) printf("%f, %f, %lu, %lu\n", getSimTimeInSeconds(), score, MaxClusterCount, VisitedClusters.size());
 }
 
 argos::CColor Cluster_loop_functions::GetFloorColor(const argos::CVector2 &c_pos_on_floor) {
@@ -527,10 +532,10 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// Don't clear existing clusters - preserve them across updates
 
 	// Use food cluster geometry to set a reasonable clustering radius
-	argos::Real foodOffset = 3.0 * FoodRadius;
+	argos::Real foodOffset = 1.5 * FoodRadius;
 	argos::Real clusterWidth = ClusterWidthX * foodOffset;
 	argos::Real clusterHeight = ClusterLengthY * foodOffset;
-	argos::Real clusterRadius = std::max(clusterWidth, clusterHeight) / 2.0;
+	argos::Real clusterRadius = std::max(clusterWidth, clusterHeight) / 5.0;
 
 	// Distance threshold to assign points to the same cluster (slightly less than radius)
 	argos::Real mergeThreshold = clusterRadius * 0.6;
@@ -591,7 +596,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 		// Create VisitedCluster object 
 		argos::CVector2 centroid(sumX / members.size(), sumY / members.size());
 
-		VisitedCluster vc(centroid, clusterWidth, clusterHeight);
+		VisitedCluster vc(centroid, clusterRadius);
 		vc.visitCount = members.size();
 
 		// Decide merged flag based on coverage
@@ -616,8 +621,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 argos::Real Cluster_loop_functions::CalculateClusterCoverage(const VisitedCluster& cluster) {
 	// Estimate coverage using a circular cluster radius and visit spacing
 	argos::Real visitTolerance = 0.3; // Same default as controller memory spacing
-	argos::Real clusterRadius = std::max(cluster.width, cluster.height) / 2.0;
-	argos::Real clusterArea = argos::CRadians::PI.GetValue() * clusterRadius * clusterRadius;
+	argos::Real clusterArea = argos::CRadians::PI.GetValue() * cluster.radius * cluster.radius;
 	argos::Real visitCellArea = visitTolerance * visitTolerance;
 	argos::Real maxPossibleVisits = clusterArea / visitCellArea;
 	argos::Real coverage = static_cast<argos::Real>(cluster.visitCount) / std::max(1.0, maxPossibleVisits);
@@ -631,208 +635,168 @@ argos::Real Cluster_loop_functions::CalculateClusterCoverage(const VisitedCluste
 void Cluster_loop_functions::MergeClustersIntoSuperClusters() {
 	if(VisitedClusters.size() < 2) return; // Nothing to merge
 
-	// Calculate arena area
-	argos::Real arenaWidth = ForageRangeX.GetMax() - ForageRangeX.GetMin();
-	argos::Real arenaHeight = ForageRangeY.GetMax() - ForageRangeY.GetMin();
-	argos::Real arenaArea = arenaWidth * arenaHeight;
-
-	// Limit merge iterations to prevent over-consolidation into single cluster
-	int maxIterations = 2;
+	// Iterate to allow merged clusters to propagate
+	int maxIterations = 5;
 	for(int iteration = 0; iteration < maxIterations && VisitedClusters.size() > 1; ++iteration) {
 		bool mergedAny = false;
 		std::vector<VisitedCluster> newClusters;
 		std::vector<bool> merged(VisitedClusters.size(), false);
 
 		for(size_t i = 0; i < VisitedClusters.size(); ++i) {
-			if(merged[i]) continue; // Already merged
+			if(merged[i]) continue;
 
-			// Try to find clusters to merge with i
 			std::vector<size_t> members;
 			members.push_back(i);
-			merged[i] = true;
-
-			if(VisitedClusters[i].isMerged) {
-				newClusters.push_back(VisitedClusters[i]);
-				continue;
-			}
-			
-			argos::Real totalArea = argos::CRadians::PI.GetValue() * 
-				std::pow(std::max(VisitedClusters[i].width, VisitedClusters[i].height) / 2.0, 2.0);
 
 			for(size_t j = i + 1; j < VisitedClusters.size(); ++j) {
 				if(merged[j]) continue;
 
-				if(VisitedClusters[j].isMerged) continue;
-
-				argos::Real clusterArea = argos::CRadians::PI.GetValue() * 
-					std::pow(std::max(VisitedClusters[j].width, VisitedClusters[j].height) / 2.0, 2.0);
-
+				argos::Real r1 = VisitedClusters[i].radius;
+				argos::Real r2 = VisitedClusters[j].radius;
 				argos::CVector2 diff = VisitedClusters[j].center - VisitedClusters[i].center;
-				argos::Real distance = diff.Length();
+				argos::Real dist = diff.Length();
 
-				argos::Real mergedRadius = distance / 2.0 + 
-					std::max(VisitedClusters[i].width, VisitedClusters[i].height) / 2.0 +
-					std::max(VisitedClusters[j].width, VisitedClusters[j].height) / 2.0;
-				argos::Real mergedArea = argos::CRadians::PI.GetValue() * mergedRadius * mergedRadius;
-
-				argos::Real combinedArea = totalArea + clusterArea;
-				argos::Real coverageRatio = combinedArea / mergedArea;
-
-				// Only merge if clusters are very close (high coverage ratio)
-				// Threshold of 0.5 balances between creating super-clusters and avoiding over-consolidation
-				if(coverageRatio > 0.3) {
+				// Merge clusters only when they overlap
+				if(dist < (r1 + r2)) {
 					members.push_back(j);
 					merged[j] = true;
-					totalArea += clusterArea;
-					mergedAny = true;
 				}
 			}
 
 			if(members.size() == 1) {
-				// No merging occurred, keep original cluster
 				newClusters.push_back(VisitedClusters[i]);
 			} else {
-				// Delete all member clusters and create a new bigger cluster
+				mergedAny = true;
+				
 				argos::Real totalWeight = 0.0;
 				argos::Real sumX = 0.0, sumY = 0.0;
 				size_t totalVisits = 0;
-				argos::Real maxWidth = 0.0, maxHeight = 0.0;
+				argos::Real maxRadius = 0.0;
 
 				for(size_t idx : members) {
+					// Weight center by visit count to stabilize position
 					argos::Real weight = static_cast<argos::Real>(VisitedClusters[idx].visitCount);
 					sumX += VisitedClusters[idx].center.GetX() * weight;
 					sumY += VisitedClusters[idx].center.GetY() * weight;
 					totalWeight += weight;
 					totalVisits += VisitedClusters[idx].visitCount;
-					maxWidth = std::max(maxWidth, VisitedClusters[idx].width);
-					maxHeight = std::max(maxHeight, VisitedClusters[idx].height);
+					
+					if(VisitedClusters[idx].radius > maxRadius) {
+						maxRadius = VisitedClusters[idx].radius;
+					}
 				}
 
 				argos::CVector2 superCenter(sumX / totalWeight, sumY / totalWeight);
-				argos::Real maxDist = 0.0;
-				for(size_t idx : members) {
-					argos::Real dist = (VisitedClusters[idx].center - superCenter).Length() +
-						std::max(VisitedClusters[idx].width, VisitedClusters[idx].height) / 2.0;
-					maxDist = std::max(maxDist, dist);
-				}
-				argos::Real superWidth = maxDist * 2.0;
-				argos::Real superHeight = maxDist * 2.0;
+				
+				// Apply new radius rule: 1.2x the radius of the original clusters (using max as reference)
+				argos::Real superRadius = maxRadius * 1.2;
+				if(superRadius > 1.0) superRadius = 1.0;
 
-				VisitedCluster superCluster(superCenter, superWidth, superHeight);
+				VisitedCluster superCluster(superCenter, superRadius);
 				superCluster.visitCount = totalVisits;
 				superCluster.isMerged = true;
 
 				newClusters.push_back(superCluster);
-				// All member clusters are deleted (not copied)
 			}
 		}
 
 		VisitedClusters = newClusters;
-
-		// Check if largest cluster covers the arena - stop to avoid over-merging
-		argos::Real largestArea = 0.0;
-		argos::Real arenaWidth = ForageRangeX.GetMax() - ForageRangeX.GetMin();
-		argos::Real arenaHeight = ForageRangeY.GetMax() - ForageRangeY.GetMin();
-		argos::Real arenaArea = arenaWidth * arenaHeight;
-		for(const auto& c : VisitedClusters) {
-			argos::Real area = c.width * c.height;
-			if(area > largestArea) largestArea = area;
-		}
-		if(largestArea >= arenaArea) break;
 		
 		// Break if no merges occurred in this iteration
 		if(!mergedAny) break;
 	}
-	
-	// Triangular super-cluster merging: merge sets of 3 super clusters forming triangles
-	//MergeTriangularSuperClusters();
 }
 
 /*****
- * Merge every 3 super clusters that form triangular patterns into a single cluster
- * with the center at the triangle's centroid
+ * Merge overlapping super clusters into a bigger cluster that covers all of them.
+ * Clusters are treated as circles for overlap detection.
+ * The resulting cluster is the enclosing circle of the merged set.
  *****/
 void Cluster_loop_functions::MergeTriangularSuperClusters() {
-	if(VisitedClusters.size() < 3) return; // Need at least 3 clusters to form a triangle
-	
-	std::vector<bool> merged(VisitedClusters.size(), false);
+	if(VisitedClusters.size() < 2) return;
+
+	std::vector<bool> processed(VisitedClusters.size(), false);
 	std::vector<VisitedCluster> newClusters;
-	
-	// Find triangular patterns among super clusters
+
 	for(size_t i = 0; i < VisitedClusters.size(); ++i) {
-		if(merged[i] || !VisitedClusters[i].isMerged) continue;
-		
-		// Try to find two other super clusters to form a triangle
-		for(size_t j = i + 1; j < VisitedClusters.size(); ++j) {
-			if(merged[j] || !VisitedClusters[j].isMerged) continue;
+		if(processed[i]) continue;
+
+		if(!VisitedClusters[i].isMerged) {
+			newClusters.push_back(VisitedClusters[i]);
+			processed[i] = true;
+			continue;
+		}
+
+		// Start a group with cluster i
+		std::vector<size_t> group;
+		std::vector<size_t> queue;
+		queue.push_back(i);
+		processed[i] = true;
+		group.push_back(i);
+
+		// BFS to find all connected (overlapping) clusters
+		size_t head = 0;
+		while(head < queue.size()) {
+			size_t curr = queue[head++];
 			
-			for(size_t k = j + 1; k < VisitedClusters.size(); ++k) {
-				if(merged[k] || !VisitedClusters[k].isMerged) continue;
-				
-				// Check if these 3 clusters form a reasonable triangle
-				argos::CVector2 p1 = VisitedClusters[i].center;
-				argos::CVector2 p2 = VisitedClusters[j].center;
-				argos::CVector2 p3 = VisitedClusters[k].center;
-				
-				argos::Real d12 = (p2 - p1).Length();
-				argos::Real d13 = (p3 - p1).Length();
-				argos::Real d23 = (p3 - p2).Length();
-				
-				// Check if distances form a valid triangle (no edge is too long relative to others)
-				argos::Real maxEdge = std::max({d12, d13, d23});
-				argos::Real minEdge = std::min({d12, d13, d23});
-				
-				// Valid triangle if max edge is not more than 2x the min edge (relatively equilateral)
-				if(maxEdge <= minEdge * 2.0) {
-					// Calculate triangle centroid
-					argos::CVector2 centroid((p1.GetX() + p2.GetX() + p3.GetX()) / 3.0,
-					                          (p1.GetY() + p2.GetY() + p3.GetY()) / 3.0);
-					
-					// Calculate the size of the merged cluster (encompassing all 3)
-					argos::Real maxDistFromCentroid = 0.0;
-					maxDistFromCentroid = std::max(maxDistFromCentroid, (p1 - centroid).Length() + 
-						std::max(VisitedClusters[i].width, VisitedClusters[i].height) / 2.0);
-					maxDistFromCentroid = std::max(maxDistFromCentroid, (p2 - centroid).Length() + 
-						std::max(VisitedClusters[j].width, VisitedClusters[j].height) / 2.0);
-					maxDistFromCentroid = std::max(maxDistFromCentroid, (p3 - centroid).Length() + 
-						std::max(VisitedClusters[k].width, VisitedClusters[k].height) / 2.0);
-					
-					argos::Real mergedWidth = maxDistFromCentroid * 2.0;
-					argos::Real mergedHeight = maxDistFromCentroid * 2.0;
-					
-					// Create the merged triangular super cluster
-					VisitedCluster triangularCluster(centroid, mergedWidth, mergedHeight);
-					triangularCluster.visitCount = VisitedClusters[i].visitCount + 
-					                                VisitedClusters[j].visitCount + 
-					                                VisitedClusters[k].visitCount;
-					triangularCluster.isMerged = true;
-					
-					newClusters.push_back(triangularCluster);
-					
-					// Mark these clusters as merged
-					merged[i] = true;
-					merged[j] = true;
-					merged[k] = true;
-					
-					// Break out to find next set of 3
-					break;
+			argos::Real r1 = VisitedClusters[curr].radius;
+
+			for(size_t j = 0; j < VisitedClusters.size(); ++j) {
+				if(processed[j]) continue;
+				if(!VisitedClusters[j].isMerged) continue;
+
+				argos::Real r2 = VisitedClusters[j].radius;
+				argos::Real dist = (VisitedClusters[curr].center - VisitedClusters[j].center).Length();
+
+				// Check overlap
+				if(dist < (r1 + r2)) {
+					processed[j] = true;
+					queue.push_back(j);
+					group.push_back(j);
 				}
 			}
-			if(merged[i]) break; // Already merged, move to next i
 		}
-	}
-	
-	// Add all unmerged clusters to the result
-	for(size_t i = 0; i < VisitedClusters.size(); ++i) {
-		if(!merged[i]) {
+
+		if(group.size() >= 2) {
+			// Merge the group
+			argos::Real minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+			size_t totalVisits = 0;
+
+			for(size_t idx : group) {
+				argos::Real r = VisitedClusters[idx].radius;
+				argos::Real cx = VisitedClusters[idx].center.GetX();
+				argos::Real cy = VisitedClusters[idx].center.GetY();
+
+				minX = std::min(minX, cx - r);
+				maxX = std::max(maxX, cx + r);
+				minY = std::min(minY, cy - r);
+				maxY = std::max(maxY, cy + r);
+
+				totalVisits += VisitedClusters[idx].visitCount;
+			}
+
+			argos::Real newW = maxX - minX;
+			argos::Real newH = maxY - minY;
+			argos::CVector2 newCenter(minX + newW/2.0, minY + newH/2.0);
+
+			// Calculate new enclosing radius
+			argos::Real maxDist = 0.0;
+			for(size_t idx : group) {
+				argos::Real dist = (VisitedClusters[idx].center - newCenter).Length() + VisitedClusters[idx].radius;
+				if(dist > maxDist) maxDist = dist;
+			}
+			
+			VisitedCluster mergedCluster(newCenter, maxDist);
+			mergedCluster.visitCount = totalVisits;
+			mergedCluster.isMerged = true;
+			newClusters.push_back(mergedCluster);
+		} else {
+			// Keep original
 			newClusters.push_back(VisitedClusters[i]);
 		}
 	}
-	
-	// Update the cluster list with merged triangular clusters
-	if(!newClusters.empty()) {
-		VisitedClusters = newClusters;
-	}
+
+	VisitedClusters = newClusters;
 }
 
 /*****
@@ -849,7 +813,7 @@ argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 
 	// Sample 10 random points and find the one with fewest clusters within 1 meter radius
 	const int numSamples = 10;
-	const argos::Real searchRadius = 1.0; // 1 meter radius
+	const argos::Real searchRadius = 0.5; // 0.5 meter radius
 	const argos::Real searchRadiusSquared = searchRadius * searchRadius;
 	
 	std::vector<argos::CVector2> samplePoints;

@@ -165,7 +165,7 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 			
 			// Draw as a larger magenta dot to indicate a merged/clustered area
 			CColor clusterColor = CColor::MAGENTA;
-			Real clusterRadius = 0.1; // Larger radius for clusters
+			Real clusterRadius = loopFunctions.VisitedClusters[i].radius; // Use stored radius
 			Real clusterHeight = 0.02; // Slightly taller
 			
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), clusterRadius, clusterHeight, clusterColor);
@@ -182,8 +182,7 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 		for(size_t j = 0; j < loopFunctions.VisitedClusters.size(); j++) {
 			if(loopFunctions.VisitedClusters[j].isMerged) {
 				CVector2 diff = loopFunctions.VisitedLocations[i] - loopFunctions.VisitedClusters[j].center;
-				if(std::abs(diff.GetX()) <= loopFunctions.VisitedClusters[j].width/2.0 && 
-				   std::abs(diff.GetY()) <= loopFunctions.VisitedClusters[j].height/2.0) {
+				if(diff.SquareLength() <= loopFunctions.VisitedClusters[j].radius * loopFunctions.VisitedClusters[j].radius) {
 					isInMergedCluster = true;
 					break;
 				}
