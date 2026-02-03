@@ -612,6 +612,30 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 
 	// Second-level clustering: merge clusters into super-clusters
 	MergeClustersIntoSuperClusters();
+	/*
+	// Calculate total area of all clusters
+	argos::Real totalClusterArea = 0.0;
+	for(const auto& cluster : VisitedClusters) {
+		totalClusterArea += argos::CRadians::PI.GetValue() * cluster.radius * cluster.radius;
+	}
+
+	// Calculate map area
+	argos::Real mapWidth = ForageRangeX.GetMax() - ForageRangeX.GetMin();
+	argos::Real mapHeight = ForageRangeY.GetMax() - ForageRangeY.GetMin();
+	argos::Real mapArea = mapWidth * mapHeight;
+
+	// If the area covered is over 80% the area of the map, clear all clusters with maximum size
+	if(totalClusterArea > 0.8 * mapArea) {
+		std::vector<VisitedCluster> keptClusters;
+		for(const auto& cluster : VisitedClusters) {
+			// Keep clusters that are smaller than the maximum size (0.5)
+			if(cluster.radius < 0.5) {
+				keptClusters.push_back(cluster);
+			}
+		}
+		VisitedClusters = keptClusters;
+	}
+		*/
 }
 
 /*****
@@ -690,7 +714,7 @@ void Cluster_loop_functions::MergeClustersIntoSuperClusters() {
 				
 				// Apply new radius rule: 1.2x the radius of the original clusters (using max as reference)
 				argos::Real superRadius = maxRadius * 1.2;
-				if(superRadius > 1.0) superRadius = 1.0;
+				if(superRadius > 0.5) superRadius = 0.5;
 
 				VisitedCluster superCluster(superCenter, superRadius);
 				superCluster.visitCount = totalVisits;
@@ -848,7 +872,7 @@ argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 		}
 	}
 	
-	// Return a random point from the best points (lowest cluster count)
+	// Return a random point from the best points (lowest cluster count) (in case of a tie)
 	if(!bestPoints.empty()) {
 		size_t randomIndex = RNG->Uniform(argos::CRange<argos::UInt32>(0, bestPoints.size()));
 		return bestPoints[randomIndex];

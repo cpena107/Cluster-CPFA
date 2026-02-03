@@ -17,7 +17,7 @@ Cluster_controller::Cluster_controller() :
     SiteFidelityPosition(1000, 1000), 
     updateFidelity(false),
     VisitedLocationTolerance(0.3),
-    MaxVisitedLocations(40),
+    MaxVisitedLocations(50),
     isLostResource(false),
 	isSpiralSearching(false),
 	spiralPathIndex(0),
@@ -345,6 +345,12 @@ void Cluster_controller::Searching() {
 	//if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
 		SetHoldingFood();
 	//}
+	
+	// If we just picked up food, return immediately to nest
+	// Don't continue with searching logic
+	if(IsHoldingFood() == true) {
+		return;
+	}
 	
 	// Check if we've lost the resource at an informed location
 	DetectLostResource();
