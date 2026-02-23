@@ -102,9 +102,14 @@ class Cluster_controller : public BaseController {
 
 	/* Memory of visited locations */
 	std::vector<argos::CVector2> VisitedLocations;
+	std::vector<argos::CVector2> UnsharedLocations;
 	argos::Real VisitedLocationTolerance;
+	argos::Real RecordingFrequency;
 	size_t MaxVisitedLocations;
 	bool isLostResource;
+
+	/* Cluster formation variables */
+	argos::Real MaxClusterRadius; // Maximum radius for a cluster in meters
 
 	/* Spiral search variables */
 	void SetSpiralSearchLocation();
@@ -114,6 +119,7 @@ class Cluster_controller : public BaseController {
 	argos::Real spiralRadius;
     argos::Real spiralStepAngle;
     argos::Real spiralGrowthRate;
+	
 };
 
 #endif /* Cluster_CONTROLLER_H */

@@ -65,6 +65,9 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 	double getRateOfPheromoneDecay();
 	argos::CVector2 GetLowClusterSearchLocation();	protected:
 
+		/* Record how many sites a robot communicated to the nest */
+		void RecordSitesCommunicated(size_t siteCount);
+
 		void setScore(double s);
 
 		argos::CRandom::CRNG* RNG;
@@ -88,6 +91,10 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		size_t ClusterLengthY;
 		size_t PowerRank;
 
+		/* Running average counters for sites communicated to nest */
+		size_t SitesCommunicatedSum;
+		size_t SitesCommunicatedCount;
+
 	/* Cluster variables */
 	argos::Real ProbabilityOfSwitchingToSearching;
 	argos::Real ProbabilityOfReturningToNest;
@@ -109,7 +116,10 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		std::vector<argos::CColor>   FoodColoringList;
         map<string, argos::CVector2> FidelityList; 
 		std::vector<Pheromone>   PheromoneList;
-		std::vector<argos::CRay3>    TargetRayList;
+		//std::vector<argos::CRay3>    TargetRayList;
+		std::vector<argos::CRay3>    SearchLocationRays;
+        std::map<std::string, std::vector<argos::CRay3>> RobotTrails;
+        std::map<std::string, CColor> RobotTrailColors;
 		std::vector<argos::CVector2> VisitedLocations;
 		size_t LastProcessedLocationIndex;
 
@@ -119,11 +129,13 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 			argos::Real radius;
 			size_t visitCount;
 			bool isMerged;
+            bool isFrozen;
 			
 			VisitedCluster(argos::CVector2 c, argos::Real r) 
-				: center(c), radius(r), visitCount(0), isMerged(false) {}
+				: center(c), radius(r), visitCount(0), isMerged(false), isFrozen(false) {}
 		};
 		std::vector<VisitedCluster> VisitedClusters;
+        std::vector<VisitedCluster> FrozenClusters; // Store clusters that reached max radius
 
 		argos::CRange<argos::Real>   ForageRangeX;
 		argos::CRange<argos::Real>   ForageRangeY;
@@ -133,6 +145,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
         size_t RobotsReturnedToNest;
         vector<size_t>			ForageList;
 		argos::CVector2 NestPosition;
+		argos::Real MaxClusterRadius;
 
 	private:
 

@@ -141,16 +141,31 @@ void Cluster_qt_user_functions::DrawPheromones() {
 }
 
 void Cluster_qt_user_functions::DrawTargetRays() {
-	//size_t tick = loopFunctions.GetSpace().GetSimulationClock();
-	//size_t tock = loopFunctions.GetSimulator().GetPhysicsEngine("default").GetInverseSimulationClockTick() / 8;
-
-	//if(tock == 0) tock = 1;
-
-	//if(tick % tock == 0) {
-		for(size_t j = 0; j < loopFunctions.TargetRayList.size(); j++) {
-			DrawRay(loopFunctions.TargetRayList[j], loopFunctions.TargetRayColorList[j]);
+	// Draw trails for each robot
+	for(std::map<std::string, std::vector<argos::CRay3>>::iterator it = loopFunctions.RobotTrails.begin(); it != loopFunctions.RobotTrails.end(); ++it) {
+		std::string robotID = it->first;
+		std::vector<argos::CRay3>& trails = it->second;
+		
+		CColor color = CColor::BLACK;
+		std::map<std::string, CColor>::iterator colorIt = loopFunctions.RobotTrailColors.find(robotID);
+		if(colorIt != loopFunctions.RobotTrailColors.end()) {
+			color = colorIt->second;
 		}
-	//}
+		
+		for(size_t j = 0; j < trails.size(); j++) {
+			DrawRay(trails[j], color);
+		}
+	}
+
+    CColor c = CColor::BLUE;
+	for(size_t j = 0; j < loopFunctions.SearchLocationRays.size(); j++) {
+			DrawRay(loopFunctions.SearchLocationRays[j],c);
+	}
+
+    // Clear search rays periodically to avoid clutter (every 10 seconds)
+    if((int)(loopFunctions.GetSpace().GetSimulationClock()) % ((int)(argos::CSimulator::GetInstance().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick()) * 10) == 0 && loopFunctions.GetSpace().GetSimulationClock() > 0) {
+		loopFunctions.SearchLocationRays.clear();
+	}
 }
 
 void Cluster_qt_user_functions::DrawVisitedLocations() {
@@ -192,9 +207,11 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 		// Only draw individual dots for locations not in merged clusters
 		if(!isInMergedCluster) {
 			CColor dotColor = CColor::YELLOW;
-			Real dotRadius = 0.02; // Small radius for the dots
+			Real dotRadius = 0.05; // Small radius for the dots
+			Real dotArea = 0.3; // Contour of the area covered by the dot (for visualization purposes)
 			Real dotHeight = 0.01; // Very small height
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), dotRadius, dotHeight, dotColor);
+			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), dotArea, CColor::YELLOW, false); // Add a transparent circle to indicate coverage area
 		}
 	}
 }

@@ -16,8 +16,10 @@ Cluster_controller::Cluster_controller() :
 	isUsingPheromone(0),
     SiteFidelityPosition(1000, 1000), 
     updateFidelity(false),
-    VisitedLocationTolerance(0.3),
+    VisitedLocationTolerance(0.3), // Tolerance for considering a location as "visited" (in meters)
+	RecordingFrequency(2), // Record visited location every 2 seconds
     MaxVisitedLocations(50),
+	MaxClusterRadius(1.0), // Maximum cluster radius in meters
     isLostResource(false),
 	isSpiralSearching(false),
 	spiralPathIndex(0),
@@ -46,12 +48,37 @@ void Cluster_controller::Init(argos::TConfigurationNode &node) {
 	argos::GetNodeAttribute(settings, "ResultsDirectoryPath",      results_path);
 	argos::GetNodeAttribute(settings, "DestinationNoiseStdev",      DestinationNoiseStdev);
 	argos::GetNodeAttribute(settings, "PositionNoiseStdev",      PositionNoiseStdev);
+	argos::GetNodeAttribute(settings, "RecordingFrequency",      RecordingFrequency);
+	argos::GetNodeAttribute(settings, "MaxVisitedLocations",      MaxVisitedLocations);
+	argos::GetNodeAttribute(settings, "MaxClusterRadius",      MaxClusterRadius);
 	
 	// Memory-based search parameter (optional, defaults to 0.3)
 	argos::GetNodeAttributeOrDefault(settings, "VisitedLocationTolerance", VisitedLocationTolerance, VisitedLocationTolerance);
 
 	argos::CVector2 p(GetPosition());
 	SetStartPosition(argos::CVector3(p.GetX(), p.GetY(), 0.0));
+    
+    // Initialize previous_position to current position so the first line segment is zero-length
+    previous_position = p;
+    
+    // Set a unique color for the trail based on the robot's ID
+    if(GetId().compare("Cluster_0") == 0) TrailColor = CColor::RED;
+    else if(GetId().compare("Cluster_1") == 0) TrailColor = CColor::GREEN;
+    else if(GetId().compare("Cluster_2") == 0) TrailColor = CColor::BLUE;
+    else if(GetId().compare("Cluster_3") == 0) TrailColor = CColor::MAGENTA;
+    else if(GetId().compare("Cluster_4") == 0) TrailColor = CColor::CYAN;
+    else if(GetId().compare("Cluster_5") == 0) TrailColor = CColor::YELLOW;
+    else if(GetId().compare("Cluster_6") == 0) TrailColor = CColor::ORANGE;
+    else if(GetId().compare("Cluster_7") == 0) TrailColor = CColor::BROWN;
+    else if(GetId().compare("Cluster_8") == 0) TrailColor = CColor::PURPLE;
+    else if(GetId().compare("Cluster_9") == 0) TrailColor = CColor::BLACK;
+    else if(GetId().compare("Cluster_10") == 0) TrailColor = CColor::GRAY50;
+    else if(GetId().compare("Cluster_11") == 0) TrailColor = CColor(255, 192, 203); // Pink
+    else if(GetId().compare("Cluster_12") == 0) TrailColor = CColor(0, 128, 0);     // Dark Green
+    else if(GetId().compare("Cluster_13") == 0) TrailColor = CColor(0, 0, 128);     // Navy
+    else if(GetId().compare("Cluster_14") == 0) TrailColor = CColor(128, 128, 0);   // Olive
+    else if(GetId().compare("Cluster_15") == 0) TrailColor = CColor(128, 0, 0);     // Maroon
+    else TrailColor = CColor::BLACK; // Default for others
 
 	FoodDistanceTolerance *= FoodDistanceTolerance;
 	// Start searching immediately with random location
@@ -102,17 +129,19 @@ void Cluster_controller::ControlStep() {
 
 	// Add line so we can draw the trail
 
-	CVector3 position3d(GetPosition().GetX(), GetPosition().GetY(), 0.00);
-	CVector3 target3d(previous_position.GetX(), previous_position.GetY(), 0.00);
+	CVector3 position3d(GetPosition().GetX(), GetPosition().GetY(), 0.01);
+	CVector3 target3d(previous_position.GetX(), previous_position.GetY(), 0.01);
 	CRay3 targetRay(target3d, position3d);
 	myTrail.push_back(targetRay);
-	LoopFunctions->TargetRayList.push_back(targetRay);
-	LoopFunctions->TargetRayColorList.push_back(TrailColor);
+    
+    // We don't add to the global list here anymore
+	// LoopFunctions->TargetRayList.push_back(targetRay);
+	// LoopFunctions->TargetRayColorList.push_back(TrailColor);
 
 	previous_position = GetPosition();
 
-	// Record current location in memory when searching (store locally only)
-	if(Cluster_state == SEARCHING && SimulationTick() % (SimulationTicksPerSecond() / 4) == 0) {
+	// Record current location in memory when searching (store locally only) every 2 seconds to avoid excessive memory usage and to allow for some movement between recorded locations
+	if(Cluster_state == SEARCHING && SimulationTick() % (size_t)(SimulationTicksPerSecond() * RecordingFrequency) == 0) { 
 		RecordVisitedLocation(GetPosition());
 	}
 
@@ -141,6 +170,7 @@ void Cluster_controller::Reset() {
 	
 	/* Clear visited locations memory */
 	VisitedLocations.clear();
+	UnsharedLocations.clear();
 	//isLostResource = false;
 	
 	isSpiralSearching = false;
@@ -193,6 +223,10 @@ bool Cluster_controller::IsInTheNest() {
 
 void Cluster_controller::SetLoopFunctions(Cluster_loop_functions* lf) {
 	LoopFunctions = lf;
+
+	// Propagate MaxClusterRadius so the loop functions uses the same value
+	// as the controller XML settings — single source of truth.
+	LoopFunctions->MaxClusterRadius = MaxClusterRadius;
 
 	// Initialize the SiteFidelityPosition
 
@@ -261,8 +295,7 @@ void Cluster_controller::SetLoopFunctions(Cluster_loop_functions* lf) {
 
 }
 
-void Cluster_controller::Departing()
-{
+void Cluster_controller::Departing() {
 	argos::Real distanceToTarget = (GetPosition() - GetTarget()).Length();
 	argos::Real randomNumber = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 
@@ -336,15 +369,15 @@ void Cluster_controller::DetectLostResource() {
 		}
 		
 		// Don't switch to uninformed search immediately if we are spiraling
-		// isInformed = false; 
+		isInformed = false; 
 	}
 }
 
 void Cluster_controller::Searching() {
 	// "scan" for food only every half of a second
-	//if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
+	if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
 		SetHoldingFood();
-	//}
+	}
 	
 	// If we just picked up food, return immediately to nest
 	// Don't continue with searching logic
@@ -473,6 +506,8 @@ void Cluster_controller::Searching() {
 	}
 	else {
 		//argos::LOG << "SEARCH: Carrying food." << std::endl;
+		SetTarget(LoopFunctions->NestPosition);
+		Cluster_state = RETURNING;
 	}
 
 		
@@ -546,6 +581,10 @@ void Cluster_controller::Returning() {
             
             // Share visited locations with nest (successful foraging)
             ShareVisitedLocationsWithNest();
+            
+            // Update global trail visualization for this robot only upon successful return
+            LoopFunctions->RobotTrails[GetId()] = myTrail; // Copy local trail to global map
+            LoopFunctions->RobotTrailColors[GetId()] = TrailColor;
 		}
 		// If returning without food due to resource loss, keep visited locations for next search
 		else if(!isGivingUpSearch && isLostResource) {
@@ -600,6 +639,9 @@ void Cluster_controller::Returning() {
 			ClearVisitedLocations();
 			isSpiralSearching = false; // Reset spiral state
 		}
+		
+		// Always clear the local trail when leaving the nest to start a new trip
+		myTrail.clear();
 
 		//log_output_stream.close();
 	}
@@ -645,7 +687,8 @@ void Cluster_controller::SetRandomSearchLocation() {
  *****/
 void Cluster_controller::SetLowClusterSearchLocation() {
 	argos::CVector2 target = LoopFunctions->GetLowClusterSearchLocation();
-	SetIsHeadingToNest(true); // Turn off error for this
+	LoopFunctions->SearchLocationRays.push_back(argos::CRay3(argos::CVector3(LoopFunctions->NestPosition.GetX(), LoopFunctions->NestPosition.GetY(), 0.01), argos::CVector3(target.GetX(), target.GetY(), 0.01)));
+	SetIsHeadingToNest(false); // Turn off error for this
 	SetTarget(target);
 }
 
@@ -663,36 +706,36 @@ void Cluster_controller::SetHoldingFood() {
 		std::vector<argos::CVector2> newFoodList;
 		std::vector<argos::CColor> newFoodColoringList;
 		size_t i = 0, j = 0;
-      if(Cluster_state != RETURNING){
-		for(i = 0; i < LoopFunctions->FoodList.size(); i++) {
-			if((GetPosition() - LoopFunctions->FoodList[i]).SquareLength() < FoodDistanceTolerance ) {
-				// We found food! Return immediately to the nest.
-				isHoldingFood = true;
-				Cluster_state = RETURNING;
-				j = i + 1;
-				break;
-			} else {
-				//Return this unfound-food position to the list
-				newFoodList.push_back(LoopFunctions->FoodList[i]);
-				newFoodColoringList.push_back(LoopFunctions->FoodColoringList[i]);
+    	if(Cluster_state != RETURNING){
+			for(i = 0; i < LoopFunctions->FoodList.size(); i++) {
+				if((GetPosition() - LoopFunctions->FoodList[i]).SquareLength() < FoodDistanceTolerance ) {
+					// We found food! Return immediately to the nest.
+					isHoldingFood = true;
+					Cluster_state = RETURNING;
+					j = i + 1;
+					break;
+				} else {
+					//Return this unfound-food position to the list
+					newFoodList.push_back(LoopFunctions->FoodList[i]);
+					newFoodColoringList.push_back(LoopFunctions->FoodColoringList[i]);
+				}
+			}
+			for(; j < LoopFunctions->FoodList.size(); j++) {
+				newFoodList.push_back(LoopFunctions->FoodList[j]);
+				newFoodColoringList.push_back(LoopFunctions->FoodColoringList[j]);
 			}
 		}
 
-		for(; j < LoopFunctions->FoodList.size(); j++) {
-			newFoodList.push_back(LoopFunctions->FoodList[j]);
-			newFoodColoringList.push_back(LoopFunctions->FoodColoringList[j]);
-		}
-}
 		// We picked up food. Update the food list minus what we picked up.
 		if(IsHoldingFood() == true) {
 			SetIsHeadingToNest(true);
 			SetTarget(LoopFunctions->NestPosition);
 			LoopFunctions->FoodList = newFoodList;
-         LoopFunctions->FoodColoringList = newFoodColoringList; //qilu 09/12/2016
+         	LoopFunctions->FoodColoringList = newFoodColoringList; //qilu 09/12/2016
 			SetLocalResourceDensity();
 		} 
 	}
-		
+
 	// This shouldn't be checked here ---
 	// Drop off food: We are holding food and have reached the nest.
 	//else if((GetPosition() - LoopFunctions->NestPosition).SquareLength() < LoopFunctions->NestRadiusSquared) {
@@ -899,32 +942,36 @@ argos::Real Cluster_controller::GetPoissonCDF(argos::Real k, argos::Real lambda)
 }
 
 void Cluster_controller::UpdateTargetRayList() {
+	// This function is no longer used - replaced by per-robot trail visualization
+    /*
 	if(SimulationTick() % LoopFunctions->DrawDensityRate == 0 && LoopFunctions->DrawTargetRays == 1) {
-		/* Get position values required to construct a new ray */
+		// Get position values required to construct a new ray 
 		argos::CVector2 t(GetTarget());
 		argos::CVector2 p(GetPosition());
 		argos::CVector3 position3d(p.GetX(), p.GetY(), 0.02);
 		argos::CVector3 target3d(t.GetX(), t.GetY(), 0.02);
 
-		/* scale the target ray to be <= searchStepSize */
+		// scale the target ray to be <= searchStepSize 
 		argos::Real length = std::abs(t.Length() - p.Length());
 
 		if(length > SearchStepSize) {
 			MyTrail.clear();
 		} else {
-			/* add the ray to the robot's target trail */
+			// add the ray to the robot's target trail 
 			argos::CRay3 targetRay(target3d, position3d);
 			MyTrail.push_back(targetRay);
 
-			/* delete the oldest ray from the trail */
+			// delete the oldest ray from the trail 
 			if(MyTrail.size() > MaxTrailSize) {
 				MyTrail.erase(MyTrail.begin());
 			}
 
-			LoopFunctions->TargetRayList.insert(LoopFunctions->TargetRayList.end(), MyTrail.begin(), MyTrail.end());
+            // TargetRayList no longer exists in LoopFunctions
+			// LoopFunctions->TargetRayList.insert(LoopFunctions->TargetRayList.end(), MyTrail.begin(), MyTrail.end());
 			// loopFunctions.TargetRayList.push_back(myTrail);
 		}
 	}
+    */
 }
 
 /*****
@@ -935,6 +982,7 @@ void Cluster_controller::RecordVisitedLocation(argos::CVector2 location) {
 	// Check if this location is already in memory (within tolerance)
 	if(!HasVisitedLocation(location, VisitedLocationTolerance)) {
 		VisitedLocations.push_back(location);
+		UnsharedLocations.push_back(location);
 		
 		// Limit memory size to prevent unbounded growth
 		if(VisitedLocations.size() > MaxVisitedLocations) {
@@ -998,7 +1046,7 @@ void Cluster_controller::SetUnvisitedSearchLocation() {
 		candidate = argos::CVector2(x, y);
 		
 		// Check if this location hasn't been visited
-		if(!HasVisitedLocation(candidate, VisitedLocationTolerance * 2.0)) {
+		if(!HasVisitedLocation(candidate, VisitedLocationTolerance * 2.0)) { // Use a larger tolerance to encourage more exploration
 			foundUnvisited = true;
 		}
 		
@@ -1023,11 +1071,19 @@ void Cluster_controller::SetUnvisitedSearchLocation() {
  * For now, this is a placeholder that could be extended to share memory between robots.
  *****/
 void Cluster_controller::ShareVisitedLocationsWithNest() {
-	// Share all visited locations from this robot's memory with the global list
+	// Compute how many sites this robot is communicating
+	size_t communicatedSites = VisitedLocations.size();
+	// Update running average in loop functions
+	if(LoopFunctions) {
+		LoopFunctions->RecordSitesCommunicated(communicatedSites);
+	}
+
+	// Share only new visited locations from this robot's memory with the global list
 	// This happens when the robot successfully returns to the nest with food
-	for(const auto& location : VisitedLocations) {
+	for(const auto& location : UnsharedLocations) {
 		LoopFunctions->VisitedLocations.push_back(location);
 	}
+	UnsharedLocations.clear();
 	
 	// Note: Cluster updates now happen automatically in PostStep() every 5 seconds
 	// No need to track robot returns here anymore
