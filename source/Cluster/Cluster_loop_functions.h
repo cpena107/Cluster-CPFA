@@ -115,6 +115,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		std::vector<argos::CVector2> FoodList;
 		std::vector<argos::CColor>   FoodColoringList;
         map<string, argos::CVector2> FidelityList; 
+		map<string, argos::CVector2> LowClusterTargetList;
 		std::vector<Pheromone>   PheromoneList;
 		//std::vector<argos::CRay3>    TargetRayList;
 		std::vector<argos::CRay3>    SearchLocationRays;
@@ -122,6 +123,10 @@ class Cluster_loop_functions : public argos::CLoopFunctions
         std::map<std::string, CColor> RobotTrailColors;
 		std::vector<argos::CVector2> VisitedLocations;
 		size_t LastProcessedLocationIndex;
+		// Number of synthetic chain points at the front of VisitedLocations after
+		// each compression pass. Points at index >= numSyntheticPoints are real
+		// robot visits added since the last update.
+		size_t numSyntheticPoints;
 
 		/* Cluster structure for visited locations */
 		struct VisitedCluster {

@@ -140,7 +140,7 @@ void Cluster_controller::ControlStep() {
 
 	previous_position = GetPosition();
 
-	// Record current location in memory when searching (store locally only) every 2 seconds to avoid excessive memory usage and to allow for some movement between recorded locations
+	// Record current location in memory when searching (store locally only) every RecordingFrequency seconds to avoid excessive memory usage and to allow for some movement between recorded locations
 	if(Cluster_state == SEARCHING && SimulationTick() % (size_t)(SimulationTicksPerSecond() * RecordingFrequency) == 0) { 
 		RecordVisitedLocation(GetPosition());
 	}
@@ -340,6 +340,7 @@ void Cluster_controller::Departing() {
 
 		SearchTime = 0;
 		Cluster_state = SEARCHING;
+		LoopFunctions->LowClusterTargetList.erase(controllerID);
 	
 		if(isUsingSiteFidelity == true) {
 			isUsingSiteFidelity = false;
@@ -405,7 +406,8 @@ void Cluster_controller::Searching() {
 				SetIsHeadingToNest(true);
 				SetTarget(LoopFunctions->NestPosition);
 				isGivingUpSearch = true;
-	         LoopFunctions->FidelityList.erase(controllerID); 
+	         LoopFunctions->FidelityList.erase(controllerID);
+	         LoopFunctions->LowClusterTargetList.erase(controllerID);
              isUsingSiteFidelity = false; 
              updateFidelity = false; 
              isLostResource = false;
@@ -688,6 +690,7 @@ void Cluster_controller::SetRandomSearchLocation() {
 void Cluster_controller::SetLowClusterSearchLocation() {
 	argos::CVector2 target = LoopFunctions->GetLowClusterSearchLocation();
 	LoopFunctions->SearchLocationRays.push_back(argos::CRay3(argos::CVector3(LoopFunctions->NestPosition.GetX(), LoopFunctions->NestPosition.GetY(), 0.01), argos::CVector3(target.GetX(), target.GetY(), 0.01)));
+	LoopFunctions->LowClusterTargetList[controllerID] = target;
 	SetIsHeadingToNest(false); // Turn off error for this
 	SetTarget(target);
 }
@@ -979,8 +982,8 @@ void Cluster_controller::UpdateTargetRayList() {
  * This helps the robot avoid searching the same areas repeatedly.
  *****/
 void Cluster_controller::RecordVisitedLocation(argos::CVector2 location) {
-	// Check if this location is already in memory (within tolerance)
-	if(!HasVisitedLocation(location, VisitedLocationTolerance)) {
+	// Check if this location is already in memory (within tolerance) and within ForageRange before adding to memory
+	if(!HasVisitedLocation(location, VisitedLocationTolerance) && IsWithinForageRange(location)) {
 		VisitedLocations.push_back(location);
 		UnsharedLocations.push_back(location);
 		
@@ -989,6 +992,11 @@ void Cluster_controller::RecordVisitedLocation(argos::CVector2 location) {
 			VisitedLocations.erase(VisitedLocations.begin());
 		}
 	}
+}
+
+bool Cluster_controller::IsWithinForageRange(argos::CVector2 location) {
+	return (location.GetX() >= ForageRangeX.GetMin() && location.GetX() <= ForageRangeX.GetMax() &&
+	        location.GetY() >= ForageRangeY.GetMin() && location.GetY() <= ForageRangeY.GetMax());
 }
 
 /*****

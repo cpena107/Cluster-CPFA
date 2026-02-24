@@ -47,6 +47,7 @@ void Cluster_qt_user_functions::DrawOnRobot(CFootBotEntity& entity) {
 void Cluster_qt_user_functions::DrawOnArena(CFloorEntity& entity) {
 	DrawFood();
 	DrawFidelity();
+	DrawLowClusterTargets();
 	DrawPheromones();
 	DrawNest();
 	DrawVisitedLocations();
@@ -140,6 +141,15 @@ void Cluster_qt_user_functions::DrawPheromones() {
 	}
 }
 
+void Cluster_qt_user_functions::DrawLowClusterTargets() {
+	Real x, y;
+	for(map<string, CVector2>::iterator it = loopFunctions.LowClusterTargetList.begin(); it != loopFunctions.LowClusterTargetList.end(); ++it) {
+		x = it->second.GetX();
+		y = it->second.GetY();
+		DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), loopFunctions.FoodRadius * 2.0, 0.05, CColor::ORANGE);
+	}
+}
+
 void Cluster_qt_user_functions::DrawTargetRays() {
 	// Draw trails for each robot
 	for(std::map<std::string, std::vector<argos::CRay3>>::iterator it = loopFunctions.RobotTrails.begin(); it != loopFunctions.RobotTrails.end(); ++it) {
@@ -183,11 +193,16 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 			Real clusterRadius = loopFunctions.VisitedClusters[i].radius; // Use stored radius
 			Real clusterHeight = 0.02; // Slightly taller
 			
-			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), clusterRadius, clusterHeight, clusterColor);
+			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), 0.05, clusterHeight, clusterColor);
+			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), clusterRadius, clusterColor, false);
 		}
 	}
 
-	// Then, draw individual visited locations that aren't in merged clusters
+	// Then, draw individual visited locations that aren't in merged clusters.
+	// The exclusion radius is expanded by eps (0.5m) to cover compression chain
+	// endpoints that may slightly overshoot the cluster's stored radius due to
+	// ceil() rounding in the chain-step calculation.
+	const Real exclusionBuffer = 0.5; // matches DBSCAN eps in Cluster_loop_functions
 	for(size_t i = 0; i < loopFunctions.VisitedLocations.size(); i++) {
 		x = loopFunctions.VisitedLocations[i].GetX();
 		y = loopFunctions.VisitedLocations[i].GetY();
@@ -196,8 +211,9 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 		bool isInMergedCluster = false;
 		for(size_t j = 0; j < loopFunctions.VisitedClusters.size(); j++) {
 			if(loopFunctions.VisitedClusters[j].isMerged) {
+				Real exclusionRadius = loopFunctions.VisitedClusters[j].radius + exclusionBuffer;
 				CVector2 diff = loopFunctions.VisitedLocations[i] - loopFunctions.VisitedClusters[j].center;
-				if(diff.SquareLength() <= loopFunctions.VisitedClusters[j].radius * loopFunctions.VisitedClusters[j].radius) {
+				if(diff.SquareLength() <= exclusionRadius * exclusionRadius) {
 					isInMergedCluster = true;
 					break;
 				}
@@ -208,7 +224,7 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 		if(!isInMergedCluster) {
 			CColor dotColor = CColor::YELLOW;
 			Real dotRadius = 0.05; // Small radius for the dots
-			Real dotArea = 0.3; // Contour of the area covered by the dot (for visualization purposes)
+			Real dotArea = 0.25; // Contour of the area covered by the dot (for visualization purposes)
 			Real dotHeight = 0.01; // Very small height
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), dotRadius, dotHeight, dotColor);
 			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), dotArea, CColor::YELLOW, false); // Add a transparent circle to indicate coverage area

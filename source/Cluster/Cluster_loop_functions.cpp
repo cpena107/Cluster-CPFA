@@ -40,7 +40,8 @@ Cluster_loop_functions::Cluster_loop_functions() :
 	PrintFinalScore(0),
 	SitesCommunicatedSum(0),
 	SitesCommunicatedCount(0),
-	MaxClusterRadius(1.0)
+	MaxClusterRadius(1.0),
+	numSyntheticPoints(0)
 {}
 
 void Cluster_loop_functions::Init(argos::TConfigurationNode &node) {	
@@ -133,6 +134,7 @@ void Cluster_loop_functions::Reset() {
 	FoodColoringList.clear();
 	PheromoneList.clear();
 	FidelityList.clear();
+	LowClusterTargetList.clear();
 	//TargetRayList.clear();
 	//TargetRayColorList.clear();
     RobotTrails.clear();
@@ -141,6 +143,7 @@ void Cluster_loop_functions::Reset() {
 	VisitedClusters.clear();
     FrozenClusters.clear();
 	VisitedLocations.clear();
+	numSyntheticPoints = 0;
 
 	SetFoodDistribution();
 	argos::CSpace::TMapPerType& footbots = GetSpace().GetEntitiesByType("foot-bot");
@@ -574,7 +577,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	const argos::Real epsSq = eps * eps;
 	// minPts = 2: two nearby visits form a cluster, keeping sensitivity high
 	// so that even sparsely visited areas generate clusters quickly.
-	const size_t minPts = 2;
+	const size_t minPts = 3;
 
 	// Data structures for DBSCAN
 	size_t N = VisitedLocations.size();
@@ -673,14 +676,47 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			}
 			argos::CVector2 center = sum / static_cast<argos::Real>(points.size());
 
-			// Determine grown radius: inherit from a matching previous cluster and
-			// grow by 20%, or start at initialClusterRadius if this is brand-new.
-			// A previous cluster matches if this centroid falls within its radius.
-			argos::Real grownRadius = initialClusterRadius;
-			for(const auto& prev : prevClusters) {
-				if((center - prev.center).Length() <= prev.radius) {
-					grownRadius = std::min(prev.radius * growthFactor, MaxClusterRadius);
-					break;
+			// --- Radius assignment ---
+			// Find ALL previous clusters whose spatial extent overlaps this new
+			// DBSCAN cluster's centroid (within prevRadius + eps for chain slop).
+			std::vector<size_t> matchedPrev;
+			for(size_t pi = 0; pi < prevClusters.size(); ++pi) {
+				if((center - prevClusters[pi].center).Length()
+				        <= prevClusters[pi].radius + eps) {
+					matchedPrev.push_back(pi);
+				}
+			}
+
+			// A cluster grew if it absorbed at least one real robot-visit point
+			// (index >= numSyntheticPoints) — i.e., a new visit landed inside it.
+			bool hasNewVisits = false;
+			for(size_t idx : points) {
+				if(idx >= numSyntheticPoints) { hasNewVisits = true; break; }
+			}
+
+			// A cluster merged if the new DBSCAN group spans chain points that
+			// originally belonged to more than one previous cluster.
+			bool hasMerged = (matchedPrev.size() > 1);
+
+			argos::Real grownRadius;
+			if(matchedPrev.empty()) {
+				// Brand-new cluster — start small.
+				grownRadius = initialClusterRadius;
+			} else {
+				// Inherit the largest radius from all matched previous clusters.
+				argos::Real prevRadius = 0.0;
+				for(size_t pi : matchedPrev) {
+					prevRadius = std::max(prevRadius, prevClusters[pi].radius);
+				}
+				if(prevRadius >= MaxClusterRadius) {
+					// Already at max — stay static regardless of new data.
+					grownRadius = MaxClusterRadius;
+				} else if(hasNewVisits || hasMerged) {
+					// New visit absorbed or two clusters merged — grow by 20%.
+					grownRadius = std::min(prevRadius * growthFactor, MaxClusterRadius);
+				} else {
+					// No new data — hold radius exactly.
+					grownRadius = prevRadius;
 				}
 			}
 
@@ -691,33 +727,17 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 		}
 	}
 
-	// Compress VisitedLocations to keep the vector bounded while preserving
-	// each cluster's spatial extent so its radius does not collapse next cycle.
-	//
-	// Problem with storing only centroid copies: two identical points at the
-	// same location have zero spread, so the recomputed radius drops to eps/2
-	// immediately — the "shrinking" effect.
-	//
-	// Fix: represent each cluster as a 1D chain of points spaced (eps * 0.9)
-	// apart, running from -radius to +radius along the X axis through the
-	// centroid. Adjacent chain points are within eps of each other, so DBSCAN
-	// connects the entire chain into one cluster. The max distance from the
-	// recomputed centroid to the chain endpoints reconstructs the original
-	// radius faithfully on the next update.
-	//
-	// Noise points are preserved unchanged so they can accumulate neighbours.
+	// Compress VisitedLocations. Chain points go first so their indices are
+	// [0, numSyntheticPoints), and real robot visits follow at indices
+	// [numSyntheticPoints, end). This lets the next cycle distinguish them.
 	{
-		const argos::Real chainSpacing = eps * 0.9; // < eps → adjacent points connect
+		const argos::Real chainSpacing = eps;
 
 		std::vector<argos::CVector2> compressed;
-		// Reserve a safe upper bound (chain length ≤ 2*R/spacing + 1 per cluster)
-		compressed.reserve(VisitedClusters.size() * 2 + N);
+		compressed.reserve(VisitedClusters.size() * 20 + N);
 
 		for(const auto& vc : VisitedClusters) {
-			// Span the cluster's current grown radius so the next DBSCAN cycle
-			// reconstructs the same size. Growth is applied above on each update.
 			int steps = std::max(1, (int)std::ceil(vc.radius / chainSpacing));
-			// Lay down chain: center - steps*spacing … center … center + steps*spacing
 			for(int di = -steps; di <= steps; ++di) {
 				argos::CVector2 pt(vc.center.GetX() + di * chainSpacing,
 				                   vc.center.GetY());
@@ -725,7 +745,10 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			}
 		}
 
-		// Preserve all noise points unchanged
+		// Record boundary between synthetic and real points.
+		numSyntheticPoints = compressed.size();
+
+		// Preserve all noise points (real robot visits with no cluster yet).
 		for(size_t i = 0; i < N; ++i) {
 			if(clusterId[i] == -1) {
 				compressed.push_back(VisitedLocations[i]);
@@ -752,7 +775,7 @@ argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 
 	// Sample 10 random points and find the one with fewest clusters within 1 meter radius
 	const int numSamples = 10;
-	const argos::Real searchRadius = 0.5; // 0.5 meter radius
+	const argos::Real searchRadius = MaxClusterRadius; // 0.5 meter radius
 	const argos::Real searchRadiusSquared = searchRadius * searchRadius;
 	
 	std::vector<argos::CVector2> samplePoints;

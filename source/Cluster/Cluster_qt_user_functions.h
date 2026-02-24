@@ -31,6 +31,7 @@ class Cluster_qt_user_functions : public argos::CQTOpenGLUserFunctions {
 		void DrawPheromones();
 		void DrawTargetRays();
 		void DrawVisitedLocations();
+		void DrawLowClusterTargets();
 
 		Cluster_loop_functions& loopFunctions;
 

@@ -91,6 +91,7 @@ class Cluster_controller : public BaseController {
 	void ShareVisitedLocationsWithNest();
 	void ClearVisitedLocations();
 	void DetectLostResource();
+	bool IsWithinForageRange(argos::CVector2 location);
 
 	CVector2 previous_position;
 
