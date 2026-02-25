@@ -122,6 +122,10 @@ class Cluster_loop_functions : public argos::CLoopFunctions
         std::map<std::string, std::vector<argos::CRay3>> RobotTrails;
         std::map<std::string, CColor> RobotTrailColors;
 		std::vector<argos::CVector2> VisitedLocations;
+		// Snapshot of real robot-visit points that contributed to a cluster in the
+		// most recent DBSCAN run.  Populated each UpdateVisitedClusters() call
+		// (before compression) so the renderer can highlight them for debugging.
+		std::vector<argos::CVector2> ClusteredVisitedLocations;
 		size_t LastProcessedLocationIndex;
 		// Number of synthetic chain points at the front of VisitedLocations after
 		// each compression pass. Points at index >= numSyntheticPoints are real
@@ -131,13 +135,16 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		/* Cluster structure for visited locations */
 		struct VisitedCluster {
 			argos::CVector2 center;
+			// originalCenter is locked at formation and only replaced on a merge event.
+			// It anchors the centroid so drift is bounded to maxDrift (0.3 m) between updates.
+			argos::CVector2 originalCenter;
 			argos::Real radius;
 			size_t visitCount;
 			bool isMerged;
             bool isFrozen;
 			
 			VisitedCluster(argos::CVector2 c, argos::Real r) 
-				: center(c), radius(r), visitCount(0), isMerged(false), isFrozen(false) {}
+				: center(c), originalCenter(c), radius(r), visitCount(0), isMerged(false), isFrozen(false) {}
 		};
 		std::vector<VisitedCluster> VisitedClusters;
         std::vector<VisitedCluster> FrozenClusters; // Store clusters that reached max radius

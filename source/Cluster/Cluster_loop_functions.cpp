@@ -143,6 +143,7 @@ void Cluster_loop_functions::Reset() {
 	VisitedClusters.clear();
     FrozenClusters.clear();
 	VisitedLocations.clear();
+	ClusteredVisitedLocations.clear();
 	numSyntheticPoints = 0;
 
 	SetFoodDistribution();
@@ -573,11 +574,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// DBSCAN parameters
 	// eps should be broad enough that a few robot visits in an area connect.
 	// 0.5 m works well for typical robot spacing and visit density.
-	const argos::Real eps = 0.5;
+	const argos::Real eps = 0.2;
 	const argos::Real epsSq = eps * eps;
 	// minPts = 2: two nearby visits form a cluster, keeping sensitivity high
 	// so that even sparsely visited areas generate clusters quickly.
-	const size_t minPts = 3;
+	const size_t minPts = 2;
 
 	// Data structures for DBSCAN
 	size_t N = VisitedLocations.size();
@@ -587,7 +588,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 
 	// Grid-based spatial hashing — cell size == eps ensures all neighbours
 	// fall within at most the 3x3 surrounding cells.
-	argos::Real cellSize = eps;
+	argos::Real cellSize = eps * growthFactor; // Cluster growth means we need a larger cell size to avoid fragmentation
 	std::unordered_map<long, std::vector<size_t>> grid;
 
 	auto getGridKey = [&](const argos::CVector2& pos) -> long {
@@ -699,8 +700,12 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			bool hasMerged = (matchedPrev.size() > 1);
 
 			argos::Real grownRadius;
+			// originalCenter is carried forward from the previous cluster (or set fresh
+			// for a new one).  On a merge the weighted mean of the merging anchors is used.
+			argos::CVector2 anchoredCenter = center;
+
 			if(matchedPrev.empty()) {
-				// Brand-new cluster — start small.
+				// Brand-new cluster — start small; anchor is the DBSCAN centroid.
 				grownRadius = initialClusterRadius;
 			} else {
 				// Inherit the largest radius from all matched previous clusters.
@@ -709,29 +714,61 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 					prevRadius = std::max(prevRadius, prevClusters[pi].radius);
 				}
 				if(prevRadius >= MaxClusterRadius) {
-					// Already at max — stay static regardless of new data.
 					grownRadius = MaxClusterRadius;
 				} else if(hasNewVisits || hasMerged) {
-					// New visit absorbed or two clusters merged — grow by 20%.
 					grownRadius = std::min(prevRadius * growthFactor, MaxClusterRadius);
+					if(grownRadius >= MaxClusterRadius) {
+						FrozenClusters.push_back(VisitedCluster(center, grownRadius));
+					}
 				} else {
-					// No new data — hold radius exactly.
 					grownRadius = prevRadius;
+				}
+
+				if(hasMerged) {
+					// Merge event: anchor resets to the mean of the merging original centers
+					// so the new combined cluster has a fresh, representative anchor.
+					argos::CVector2 anchorSum(0.0, 0.0);
+					for(size_t pi : matchedPrev)
+						anchorSum += prevClusters[pi].originalCenter;
+					anchoredCenter = anchorSum / static_cast<argos::Real>(matchedPrev.size());
+				} else {
+					// Single predecessor: inherit its anchor and clamp drift to 0.3 m.
+					const argos::Real maxDrift = 0.3;
+					argos::CVector2 anchor = prevClusters[matchedPrev[0]].originalCenter;
+					argos::CVector2 delta  = center - anchor;
+					argos::Real     dist   = delta.Length();
+					if(dist > maxDrift) {
+						// Pull centroid back so it sits exactly maxDrift from the anchor.
+						center = anchor + delta * (maxDrift / dist);
+					}
+					anchoredCenter = anchor;
 				}
 			}
 
 			VisitedCluster vc(center, grownRadius);
+			vc.originalCenter = anchoredCenter;
 			vc.visitCount = points.size();
 			vc.isMerged   = true;
 			VisitedClusters.push_back(vc);
 		}
 	}
 
+	// Accumulate real robot-visit points that ended up in a cluster this cycle.
+	// These are the points at index >= numSyntheticPoints (from the PREVIOUS
+	// compression) whose clusterId is non-negative.  Points are appended so the
+	// full history of clustered visits is preserved for the lifetime of the sim.
+	for(size_t i = numSyntheticPoints; i < N; ++i) {
+		if(clusterId[i] >= 0) {
+			ClusteredVisitedLocations.push_back(VisitedLocations[i]);
+		}
+	}
+
 	// Compress VisitedLocations. Chain points go first so their indices are
 	// [0, numSyntheticPoints), and real robot visits follow at indices
 	// [numSyntheticPoints, end). This lets the next cycle distinguish them.
+	/**/
 	{
-		const argos::Real chainSpacing = eps;
+		const argos::Real chainSpacing = eps / MaxClusterRadius; // Place chain points every half-eps for good coverage
 
 		std::vector<argos::CVector2> compressed;
 		compressed.reserve(VisitedClusters.size() * 20 + N);
@@ -766,60 +803,79 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
  * Returns a target location in the arena that has minimal cluster coverage
  *****/
 argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
-	// If no clusters exist yet, return a random location
+	// If no clusters exist yet, return a random location.
 	if(VisitedClusters.empty()) {
-		argos::Real x = RNG->Uniform(ForageRangeX);
-		argos::Real y = RNG->Uniform(ForageRangeY);
-		return argos::CVector2(x, y);
+		return argos::CVector2(RNG->Uniform(ForageRangeX), RNG->Uniform(ForageRangeY));
 	}
 
-	// Sample 10 random points and find the one with fewest clusters within 1 meter radius
-	const int numSamples = 10;
-	const argos::Real searchRadius = MaxClusterRadius; // 0.5 meter radius
-	const argos::Real searchRadiusSquared = searchRadius * searchRadius;
-	
-	std::vector<argos::CVector2> samplePoints;
-	std::vector<int> clusterCounts;
-	
-	// Generate 10 random sample points
-	for(int i = 0; i < numSamples; ++i) {
-		argos::Real x = RNG->Uniform(ForageRangeX);
-		argos::Real y = RNG->Uniform(ForageRangeY);
-		argos::CVector2 samplePoint(x, y);
-		samplePoints.push_back(samplePoint);
-		
-		// Count clusters within 1 meter radius of this point
-		int clusterCount = 0;
-		for(const auto& cluster : VisitedClusters) {
-			argos::Real distSquared = (samplePoint - cluster.center).SquareLength();
-			if(distSquared <= searchRadiusSquared) {
-				clusterCount++;
+	// --- Build a spatial hash grid of cluster centers ---
+	// Cell size == searchRadius guarantees every cluster within searchRadius of
+	// a query point falls in at most the immediately adjacent cells (3×3 window).
+	const argos::Real searchRadius    = MaxClusterRadius;
+	const argos::Real searchRadiusSq  = searchRadius * searchRadius;
+	const argos::Real cellSize        = searchRadius;
+
+	// Same compact key as DBSCAN: gx * 100000 + gy.
+	// Works for arenas up to ±500 m on each axis.
+	auto gridKey = [&](argos::Real x, argos::Real y) -> long {
+		long gx = static_cast<long>(std::floor(x / cellSize));
+		long gy = static_cast<long>(std::floor(y / cellSize));
+		return (gx * 100000L) + gy;
+	};
+
+	std::unordered_map<long, std::vector<size_t>> clusterGrid;
+	clusterGrid.reserve(VisitedClusters.size() * 2);
+	for(size_t ci = 0; ci < VisitedClusters.size(); ++ci) {
+		const argos::CVector2& c = VisitedClusters[ci].center;
+		clusterGrid[gridKey(c.GetX(), c.GetY())].push_back(ci);
+	}
+
+	// --- Count nearby clusters for a query point using the 3×3 cell window ---
+	auto countNearbyClusters = [&](const argos::CVector2& pt) -> int {
+		long gx = static_cast<long>(std::floor(pt.GetX() / cellSize));
+		long gy = static_cast<long>(std::floor(pt.GetY() / cellSize));
+		int count = 0;
+		for(long dx = -1; dx <= 1; ++dx) {
+			for(long dy = -1; dy <= 1; ++dy) {
+				auto it = clusterGrid.find(((gx + dx) * 100000L) + (gy + dy));
+				if(it == clusterGrid.end()) continue;
+				for(size_t ci : it->second) {
+					if((pt - VisitedClusters[ci].center).SquareLength() <= searchRadiusSq)
+						++count;
+				}
 			}
 		}
-		clusterCounts.push_back(clusterCount);
+		return count;
+	};
+
+	// --- Sample candidate points and pick the least-covered one ---
+	const int numSamples = 10;
+	std::vector<argos::CVector2> samplePoints;
+	std::vector<int>             clusterCounts;
+	samplePoints.reserve(numSamples);
+	clusterCounts.reserve(numSamples);
+
+	for(int i = 0; i < numSamples; ++i) {
+		argos::CVector2 pt(RNG->Uniform(ForageRangeX), RNG->Uniform(ForageRangeY));
+		samplePoints.push_back(pt);
+		clusterCounts.push_back(countNearbyClusters(pt));
 	}
-	
-	// Find the minimum cluster count
-	int minClusterCount = *std::min_element(clusterCounts.begin(), clusterCounts.end());
-	
-	// Collect all points with the minimum cluster count
+
+	int minCount = *std::min_element(clusterCounts.begin(), clusterCounts.end());
+
 	std::vector<argos::CVector2> bestPoints;
 	for(size_t i = 0; i < samplePoints.size(); ++i) {
-		if(clusterCounts[i] == minClusterCount) {
+		if(clusterCounts[i] == minCount)
 			bestPoints.push_back(samplePoints[i]);
-		}
 	}
-	
-	// Return a random point from the best points (lowest cluster count) (in case of a tie)
+
 	if(!bestPoints.empty()) {
-		size_t randomIndex = RNG->Uniform(argos::CRange<argos::UInt32>(0, bestPoints.size()));
-		return bestPoints[randomIndex];
+		size_t idx = RNG->Uniform(argos::CRange<argos::UInt32>(0, bestPoints.size()));
+		return bestPoints[idx];
 	}
-	
-	// Fallback to random location (should not reach here)
-	argos::Real x = RNG->Uniform(ForageRangeX);
-	argos::Real y = RNG->Uniform(ForageRangeY);
-	return argos::CVector2(x, y);
+
+	// Fallback — should never be reached.
+	return argos::CVector2(RNG->Uniform(ForageRangeX), RNG->Uniform(ForageRangeY));
 }
 
 double Cluster_loop_functions::getProbabilityOfSearchingLowClusters() {

@@ -142,11 +142,29 @@ void Cluster_qt_user_functions::DrawPheromones() {
 }
 
 void Cluster_qt_user_functions::DrawLowClusterTargets() {
-	Real x, y;
-	for(map<string, CVector2>::iterator it = loopFunctions.LowClusterTargetList.begin(); it != loopFunctions.LowClusterTargetList.end(); ++it) {
-		x = it->second.GetX();
-		y = it->second.GetY();
-		DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), loopFunctions.FoodRadius * 2.0, 0.05, CColor::ORANGE);
+	CSpace& space = CSimulator::GetInstance().GetSpace();
+	CSpace::TMapPerType& footbots = space.GetEntitiesByType("foot-bot");
+
+	for(map<string, CVector2>::iterator it = loopFunctions.LowClusterTargetList.begin();
+	    it != loopFunctions.LowClusterTargetList.end(); ++it) {
+		const std::string& robotID = it->first;
+		const CVector2&    target  = it->second;
+
+		// Orange marker at the chosen low-cluster target.
+		DrawCylinder(CVector3(target.GetX(), target.GetY(), 0.0),
+		             CQuaternion(),
+		             loopFunctions.FoodRadius * 2.0, 0.05,
+		             CColor::ORANGE);
+
+		// Blue line from the robot's current position to the target.
+		CSpace::TMapPerType::iterator fbIt = footbots.find(robotID);
+		if(fbIt != footbots.end()) {
+			CFootBotEntity& fb      = *any_cast<CFootBotEntity*>(fbIt->second);
+			CVector3        robotPos = fb.GetEmbodiedEntity().GetOriginAnchor().Position;
+			DrawRay(CRay3(CVector3(robotPos.GetX(), robotPos.GetY(), 0.01),
+			              CVector3(target.GetX(),   target.GetY(),   0.01)),
+			        CColor::BLUE);
+		}
 	}
 }
 
@@ -229,6 +247,14 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), dotRadius, dotHeight, dotColor);
 			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), dotArea, CColor::YELLOW, false); // Add a transparent circle to indicate coverage area
 		}
+	}
+
+	// Draw real robot-visit points that contributed to a cluster in the last
+	// DBSCAN run as small green cylinders for debugging.
+	for(size_t i = 0; i < loopFunctions.ClusteredVisitedLocations.size(); i++) {
+		x = loopFunctions.ClusteredVisitedLocations[i].GetX();
+		y = loopFunctions.ClusteredVisitedLocations[i].GetY();
+		DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), 0.04, 0.03, CColor::GREEN);
 	}
 }
 
