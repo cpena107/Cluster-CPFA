@@ -5,6 +5,7 @@
 #include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
 #include <argos3/core/simulator/entity/floor_entity.h>
 #include <source/Cluster/Cluster_controller.h>
+#include <unordered_set>
 
 using namespace argos;
 using namespace std;
@@ -131,6 +132,10 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		// each compression pass. Points at index >= numSyntheticPoints are real
 		// robot visits added since the last update.
 		size_t numSyntheticPoints;
+		// Tracks which VisitedLocations indices have been permanently assigned
+		// to a DBSCAN cluster, so ClusteredVisitedLocations accumulates without
+		// duplicates across multiple UpdateVisitedClusters() calls.
+		std::unordered_set<size_t> clusteredLocationIndices;
 
 		/* Cluster structure for visited locations */
 		struct VisitedCluster {

@@ -423,6 +423,27 @@ void Cluster_controller::Searching() {
 				return;
 			}
 
+			// Memory is full — probabilistically return to nest to share visited locations.
+			// Uses the same ProbabilityOfReturningToNest so the tendency to return scales
+			// with the same parameter already tuned for give-up behaviour.
+			if(VisitedLocations.size() >= MaxVisitedLocations) {
+				argos::Real rMem = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
+				if(rMem < LoopFunctions->ProbabilityOfReturningToNest) {
+					SetFidelityList();
+					TrailToShare.clear();
+					SetIsHeadingToNest(true);
+					SetTarget(LoopFunctions->NestPosition);
+					isGivingUpSearch = true;
+					LoopFunctions->FidelityList.erase(controllerID);
+					LoopFunctions->LowClusterTargetList.erase(controllerID);
+					isUsingSiteFidelity = false;
+					updateFidelity = false;
+					isLostResource = false;
+					Cluster_state = RETURNING;
+					return;
+				}
+			}
+
 			// If resource was lost, prioritize spiral search or unvisited locations
 			if(isLostResource == true) {
 			    if(isSpiralSearching) {

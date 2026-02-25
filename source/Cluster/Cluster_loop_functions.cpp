@@ -144,6 +144,7 @@ void Cluster_loop_functions::Reset() {
     FrozenClusters.clear();
 	VisitedLocations.clear();
 	ClusteredVisitedLocations.clear();
+	clusteredLocationIndices.clear();
 	numSyntheticPoints = 0;
 
 	SetFoodDistribution();
@@ -555,247 +556,148 @@ void Cluster_loop_functions::RecordSitesCommunicated(size_t siteCount) {
  * Update visited location clusters using DBSCAN algorithm.
  *
  * Design intent: VisitedLocations grows monotonically as robots report visits.
- * DBSCAN is rerun on the full set each update so that previously isolated
- * "noise" points can join clusters as new neighbours accumulate nearby.
- * No points are ever deleted from VisitedLocations, and no cluster-freezing
- * logic is applied — the natural DBSCAN output is used directly each cycle.
+ * DBSCAN requires minPts=2, so any two points within eps of each other form a
+ * cluster.  eps is set to MaxClusterRadius, which also acts as the cluster size
+ * cap: once a cluster's bounding radius (centroid → farthest member) reaches or
+ * exceeds MaxClusterRadius it is "frozen" — its constituent points are excluded
+ * from all future DBSCAN passes so the cluster stops growing.  Frozen clusters
+ * remain in VisitedClusters (with isFrozen=true) for counting and rendering.
+ * All clusters with ≥2 members have isMerged=true so the renderer draws them
+ * as magenta circles.
  *****/
 void Cluster_loop_functions::UpdateVisitedClusters() {
 	if(VisitedLocations.empty()) return;
 
-	// Save previous clusters so new ones can inherit and grow their tracked radius.
-	std::vector<VisitedCluster> prevClusters = VisitedClusters;
-	VisitedClusters.clear();
-
-	// Growth parameters: clusters start small and grow 20% per update cycle.
-	const argos::Real initialClusterRadius = 0.3;
-	const argos::Real growthFactor        = 1.2;
-
-	// DBSCAN parameters
-	// eps should be broad enough that a few robot visits in an area connect.
-	// 0.5 m works well for typical robot spacing and visit density.
-	const argos::Real eps = 0.2;
+	const size_t  n         = VisitedLocations.size();
+	const argos::Real eps   = .5;
 	const argos::Real epsSq = eps * eps;
-	// minPts = 2: two nearby visits form a cluster, keeping sensitivity high
-	// so that even sparsely visited areas generate clusters quickly.
-	const size_t minPts = 2;
+	const size_t  minPts    = 2; // minimum points to form a cluster
 
-	// Data structures for DBSCAN
-	size_t N = VisitedLocations.size();
-	std::vector<bool> visited(N, false);
-	std::vector<int> clusterId(N, -1); // -1 = noise, >=0 = cluster ID
-	int C = -1; // Current cluster ID
-
-	// Grid-based spatial hashing — cell size == eps ensures all neighbours
-	// fall within at most the 3x3 surrounding cells.
-	argos::Real cellSize = eps * growthFactor; // Cluster growth means we need a larger cell size to avoid fragmentation
-	std::unordered_map<long, std::vector<size_t>> grid;
-
-	auto getGridKey = [&](const argos::CVector2& pos) -> long {
-		long gx = static_cast<long>(std::floor(pos.GetX() / cellSize));
-		long gy = static_cast<long>(std::floor(pos.GetY() / cellSize));
-		return (gx * 100000L) + gy;
-	};
-
-	for(size_t i = 0; i < N; ++i) {
-		grid[getGridKey(VisitedLocations[i])].push_back(i);
-	}
-
-	auto getNeighbors = [&](size_t pIdx) -> std::vector<size_t> {
-		std::vector<size_t> neighbors;
-		argos::CVector2 pPos = VisitedLocations[pIdx];
-		long gx = static_cast<long>(std::floor(pPos.GetX() / cellSize));
-		long gy = static_cast<long>(std::floor(pPos.GetY() / cellSize));
-
-		for(long dx = -1; dx <= 1; ++dx) {
-			for(long dy = -1; dy <= 1; ++dy) {
-				long key = ((gx + dx) * 100000L) + (gy + dy);
-				auto it = grid.find(key);
-				if(it != grid.end()) {
-					for(size_t nIdx : it->second) {
-						if((VisitedLocations[nIdx] - pPos).SquareLength() <= epsSq) {
-							neighbors.push_back(nIdx);
-						}
-					}
-				}
+	// -----------------------------------------------------------------------
+	// 1. Mark points already owned by a frozen cluster so DBSCAN skips them.
+	//    A point is "frozen" when it lies within the frozen cluster's bounding
+	//    radius of that cluster's centre.
+	// -----------------------------------------------------------------------
+	std::vector<bool> frozenPoint(n, false);
+	for(size_t i = 0; i < n; ++i) {
+		for(const auto& fc : FrozenClusters) {
+			argos::Real distSq = (VisitedLocations[i] - fc.center).SquareLength();
+			if(distSq <= fc.radius * fc.radius + epsSq) { // a little slack for border pts
+				frozenPoint[i] = true;
+				break;
 			}
 		}
-		return neighbors;
+	}
+
+	// -----------------------------------------------------------------------
+	// 2. Standard DBSCAN on non-frozen points.
+	//    label == -1 → noise/unvisited, label >= 0 → cluster id.
+	// -----------------------------------------------------------------------
+	std::vector<int>  labels(n, -1);
+	std::vector<bool> visited(n, false);
+	int clusterID = 0;
+
+	// Neighbourhood query – ignores frozen points
+	auto getNeighbors = [&](size_t idx) -> std::vector<size_t> {
+		std::vector<size_t> nb;
+		const argos::CVector2& p = VisitedLocations[idx];
+		for(size_t i = 0; i < n; ++i) {
+			if(i == idx || frozenPoint[i]) continue;
+			if((p - VisitedLocations[i]).SquareLength() <= epsSq)
+				nb.push_back(i);
+		}
+		return nb;
 	};
 
-	// DBSCAN main loop
-	for(size_t i = 0; i < N; ++i) {
-		if(visited[i]) continue;
-
+	for(size_t i = 0; i < n; ++i) {
+		if(visited[i] || frozenPoint[i]) continue;
 		visited[i] = true;
+
 		std::vector<size_t> neighbors = getNeighbors(i);
 
-		if(neighbors.size() < minPts) {
-			// Noise point — leave as -1 but do NOT remove from VisitedLocations.
-			// It will be reconsidered on the next update cycle when more nearby
-			// visits may have accumulated.
-			clusterId[i] = -1;
-		} else {
-			C++;
-			clusterId[i] = C;
+		if(neighbors.size() < minPts - 1) {
+			// Not enough neighbours — noise for now; may be absorbed later
+			continue;
+		}
 
-			size_t k = 0;
-			while(k < neighbors.size()) {
-				size_t nIdx = neighbors[k++];
+		// Start a new cluster
+		labels[i] = clusterID;
+		std::vector<size_t> seeds(neighbors.begin(), neighbors.end());
 
-				if(!visited[nIdx]) {
-					visited[nIdx] = true;
-					std::vector<size_t> nNeighbors = getNeighbors(nIdx);
-					if(nNeighbors.size() >= minPts) {
-						neighbors.insert(neighbors.end(), nNeighbors.begin(), nNeighbors.end());
-					}
-				}
+		for(size_t si = 0; si < seeds.size(); ++si) {
+			size_t q = seeds[si];
+			if(frozenPoint[q]) continue;
 
-				if(clusterId[nIdx] == -1) {
-					clusterId[nIdx] = C;
+			if(!visited[q]) {
+				visited[q] = true;
+				std::vector<size_t> qnb = getNeighbors(q);
+				if(qnb.size() >= minPts - 1) {
+					seeds.insert(seeds.end(), qnb.begin(), qnb.end());
 				}
 			}
+			if(labels[q] == -1) {
+				labels[q] = clusterID;
+			}
 		}
+		++clusterID;
 	}
 
-	// Convert DBSCAN clusters to VisitedCluster objects
-	if(C >= 0) {
-		std::vector<std::vector<size_t>> pointsPerCluster(C + 1);
-		for(size_t i = 0; i < N; ++i) {
-			if(clusterId[i] >= 0) {
-				pointsPerCluster[clusterId[i]].push_back(i);
-			}
-		}
-
-		for(const auto& points : pointsPerCluster) {
-			if(points.empty()) continue;
-
-			// Centroid
-			argos::CVector2 sum(0.0, 0.0);
-			for(size_t idx : points) {
-				sum += VisitedLocations[idx];
-			}
-			argos::CVector2 center = sum / static_cast<argos::Real>(points.size());
-
-			// --- Radius assignment ---
-			// Find ALL previous clusters whose spatial extent overlaps this new
-			// DBSCAN cluster's centroid (within prevRadius + eps for chain slop).
-			std::vector<size_t> matchedPrev;
-			for(size_t pi = 0; pi < prevClusters.size(); ++pi) {
-				if((center - prevClusters[pi].center).Length()
-				        <= prevClusters[pi].radius + eps) {
-					matchedPrev.push_back(pi);
-				}
-			}
-
-			// A cluster grew if it absorbed at least one real robot-visit point
-			// (index >= numSyntheticPoints) — i.e., a new visit landed inside it.
-			bool hasNewVisits = false;
-			for(size_t idx : points) {
-				if(idx >= numSyntheticPoints) { hasNewVisits = true; break; }
-			}
-
-			// A cluster merged if the new DBSCAN group spans chain points that
-			// originally belonged to more than one previous cluster.
-			bool hasMerged = (matchedPrev.size() > 1);
-
-			argos::Real grownRadius;
-			// originalCenter is carried forward from the previous cluster (or set fresh
-			// for a new one).  On a merge the weighted mean of the merging anchors is used.
-			argos::CVector2 anchoredCenter = center;
-
-			if(matchedPrev.empty()) {
-				// Brand-new cluster — start small; anchor is the DBSCAN centroid.
-				grownRadius = initialClusterRadius;
-			} else {
-				// Inherit the largest radius from all matched previous clusters.
-				argos::Real prevRadius = 0.0;
-				for(size_t pi : matchedPrev) {
-					prevRadius = std::max(prevRadius, prevClusters[pi].radius);
-				}
-				if(prevRadius >= MaxClusterRadius) {
-					grownRadius = MaxClusterRadius;
-				} else if(hasNewVisits || hasMerged) {
-					grownRadius = std::min(prevRadius * growthFactor, MaxClusterRadius);
-					if(grownRadius >= MaxClusterRadius) {
-						FrozenClusters.push_back(VisitedCluster(center, grownRadius));
-					}
-				} else {
-					grownRadius = prevRadius;
-				}
-
-				if(hasMerged) {
-					// Merge event: anchor resets to the mean of the merging original centers
-					// so the new combined cluster has a fresh, representative anchor.
-					argos::CVector2 anchorSum(0.0, 0.0);
-					for(size_t pi : matchedPrev)
-						anchorSum += prevClusters[pi].originalCenter;
-					anchoredCenter = anchorSum / static_cast<argos::Real>(matchedPrev.size());
-				} else {
-					// Single predecessor: inherit its anchor and clamp drift to 0.3 m.
-					const argos::Real maxDrift = 0.3;
-					argos::CVector2 anchor = prevClusters[matchedPrev[0]].originalCenter;
-					argos::CVector2 delta  = center - anchor;
-					argos::Real     dist   = delta.Length();
-					if(dist > maxDrift) {
-						// Pull centroid back so it sits exactly maxDrift from the anchor.
-						center = anchor + delta * (maxDrift / dist);
-					}
-					anchoredCenter = anchor;
-				}
-			}
-
-			VisitedCluster vc(center, grownRadius);
-			vc.originalCenter = anchoredCenter;
-			vc.visitCount = points.size();
-			vc.isMerged   = true;
-			VisitedClusters.push_back(vc);
-		}
+	// -----------------------------------------------------------------------
+	// 3. Build per-cluster point lists
+	// -----------------------------------------------------------------------
+	std::vector<std::vector<size_t>> clusterPoints(clusterID);
+	for(size_t i = 0; i < n; ++i) {
+		if(labels[i] >= 0)
+			clusterPoints[labels[i]].push_back(i);
 	}
 
-	// Accumulate real robot-visit points that ended up in a cluster this cycle.
-	// These are the points at index >= numSyntheticPoints (from the PREVIOUS
-	// compression) whose clusterId is non-negative.  Points are appended so the
-	// full history of clustered visits is preserved for the lifetime of the sim.
-	for(size_t i = numSyntheticPoints; i < N; ++i) {
-		if(clusterId[i] >= 0) {
-			ClusteredVisitedLocations.push_back(VisitedLocations[i]);
+	// -----------------------------------------------------------------------
+	// 4. Compute centroid + bounding radius; freeze clusters that reached cap
+	// -----------------------------------------------------------------------
+	VisitedClusters.clear();
+	// Do NOT clear ClusteredVisitedLocations — it accumulates persistently
+	// across calls so all ever-clustered points remain visible (green).
+
+	// Re-add already-frozen clusters so counts and rendering remain correct
+	for(const auto& fc : FrozenClusters)
+		VisitedClusters.push_back(fc);
+
+	for(int ci = 0; ci < clusterID; ++ci) {
+		const std::vector<size_t>& pts = clusterPoints[ci];
+		if(pts.empty()) continue;
+
+		// Centroid
+		argos::CVector2 centroid(0.0, 0.0);
+		for(size_t idx : pts) centroid += VisitedLocations[idx];
+		centroid /= static_cast<argos::Real>(pts.size());
+
+		// Bounding radius (max distance from centroid to any member point)
+		argos::Real radius = 0.0;
+		for(size_t idx : pts) {
+			argos::Real d = (centroid - VisitedLocations[idx]).Length();
+			if(d > radius) radius = d;
 		}
-	}
 
-	// Compress VisitedLocations. Chain points go first so their indices are
-	// [0, numSyntheticPoints), and real robot visits follow at indices
-	// [numSyntheticPoints, end). This lets the next cycle distinguish them.
-	/**/
-	{
-		const argos::Real chainSpacing = eps / MaxClusterRadius; // Place chain points every half-eps for good coverage
-
-		std::vector<argos::CVector2> compressed;
-		compressed.reserve(VisitedClusters.size() * 20 + N);
-
-		for(const auto& vc : VisitedClusters) {
-			int steps = std::max(1, (int)std::ceil(vc.radius / chainSpacing));
-			for(int di = -steps; di <= steps; ++di) {
-				argos::CVector2 pt(vc.center.GetX() + di * chainSpacing,
-				                   vc.center.GetY());
-				compressed.push_back(pt);
+		// Add newly-clustered points to the persistent green-dot vector.
+		// clusteredLocationIndices guards against duplicates across calls.
+		for(size_t idx : pts) {
+			if(clusteredLocationIndices.insert(idx).second) {
+				ClusteredVisitedLocations.push_back(VisitedLocations[idx]);
 			}
 		}
 
-		// Record boundary between synthetic and real points.
-		numSyntheticPoints = compressed.size();
+		VisitedCluster vc(centroid, std::max(radius, FoodRadius));
+		vc.visitCount = pts.size();
+		vc.isMerged   = true; // render as magenta
 
-		// Preserve all noise points (real robot visits with no cluster yet).
-		for(size_t i = 0; i < N; ++i) {
-			if(clusterId[i] == -1) {
-				compressed.push_back(VisitedLocations[i]);
-			}
+		if(radius >= MaxClusterRadius) {
+			// Cap reached — freeze this cluster
+			vc.isFrozen = true;
+			FrozenClusters.push_back(vc);
 		}
 
-		VisitedLocations = std::move(compressed);
+		VisitedClusters.push_back(vc);
 	}
-
-	LastProcessedLocationIndex = VisitedLocations.size();
 }
 
 /*****
