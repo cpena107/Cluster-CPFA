@@ -1131,7 +1131,7 @@ void Cluster_controller::ClearVisitedLocations() {
  * Used when returning to a visited location/pheromone without finding food immediately.
  *****/
 void Cluster_controller::SetSpiralSearchLocation() {
-    argos::Real maxRadius = 0.5; // Default max radius if no super cluster found
+    argos::Real maxRadius = MaxClusterRadius; // Default max radius if no super cluster found
     
     // Find if we are near a super cluster to determine radius
     /*if(LoopFunctions != NULL) {

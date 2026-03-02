@@ -147,9 +147,10 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 			size_t visitCount;
 			bool isMerged;
             bool isFrozen;
+			int clusterId; // unique ID for debugging
 			
 			VisitedCluster(argos::CVector2 c, argos::Real r) 
-				: center(c), originalCenter(c), radius(r), visitCount(0), isMerged(false), isFrozen(false) {}
+				: center(c), originalCenter(c), radius(r), visitCount(0), isMerged(false), isFrozen(false), clusterId(-1) {}
 		};
 		std::vector<VisitedCluster> VisitedClusters;
         std::vector<VisitedCluster> FrozenClusters; // Store clusters that reached max radius

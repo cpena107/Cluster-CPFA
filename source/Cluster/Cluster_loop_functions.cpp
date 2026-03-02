@@ -569,7 +569,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	if(VisitedLocations.empty()) return;
 
 	const size_t  n         = VisitedLocations.size();
-	const argos::Real eps   = .5;
+	const argos::Real eps   = .4;
 	const argos::Real epsSq = eps * eps;
 	const size_t  minPts    = 2; // minimum points to form a cluster
 
@@ -592,7 +592,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// -----------------------------------------------------------------------
 	// 2. Standard DBSCAN on non-frozen points.
 	//    label == -1 → noise/unvisited, label >= 0 → cluster id.
+	//    maxClusterSize caps how many points may join a single cluster per
+	//    pass (seed counts as 1), preventing large merges in one update.
 	// -----------------------------------------------------------------------
+	const size_t maxClusterSize = 6; // seed + up to 2 neighbours per pass
+
 	std::vector<int>  labels(n, -1);
 	std::vector<bool> visited(n, false);
 	int clusterID = 0;
@@ -620,23 +624,31 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			continue;
 		}
 
-		// Start a new cluster
+		// Start a new cluster; seed counts as the first member.
 		labels[i] = clusterID;
+		size_t clusterSize = 1;
 		std::vector<size_t> seeds(neighbors.begin(), neighbors.end());
 
 		for(size_t si = 0; si < seeds.size(); ++si) {
+			// Hard cap: stop expanding once the cluster is full for this pass.
+			if(clusterSize >= maxClusterSize) break;
+
 			size_t q = seeds[si];
 			if(frozenPoint[q]) continue;
 
 			if(!visited[q]) {
 				visited[q] = true;
-				std::vector<size_t> qnb = getNeighbors(q);
-				if(qnb.size() >= minPts - 1) {
-					seeds.insert(seeds.end(), qnb.begin(), qnb.end());
+				// Only propagate neighbourhood if we still have room to grow.
+				if(clusterSize + 1 < maxClusterSize) {
+					std::vector<size_t> qnb = getNeighbors(q);
+					if(qnb.size() >= minPts - 1) {
+						seeds.insert(seeds.end(), qnb.begin(), qnb.end());
+					}
 				}
 			}
 			if(labels[q] == -1) {
 				labels[q] = clusterID;
+				++clusterSize;
 			}
 		}
 		++clusterID;
@@ -654,6 +666,13 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// -----------------------------------------------------------------------
 	// 4. Compute centroid + bounding radius; freeze clusters that reached cap
 	// -----------------------------------------------------------------------
+
+	// Snapshot previous non-frozen clusters for ID matching before clearing.
+	std::vector<VisitedCluster> prevClusters;
+	for(const auto& vc : VisitedClusters) {
+		if(!vc.isFrozen) prevClusters.push_back(vc);
+	}
+
 	VisitedClusters.clear();
 	// Do NOT clear ClusteredVisitedLocations — it accumulates persistently
 	// across calls so all ever-clustered points remain visible (green).
@@ -661,6 +680,8 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// Re-add already-frozen clusters so counts and rendering remain correct
 	for(const auto& fc : FrozenClusters)
 		VisitedClusters.push_back(fc);
+
+	static int nextClusterId = 0;
 
 	for(int ci = 0; ci < clusterID; ++ci) {
 		const std::vector<size_t>& pts = clusterPoints[ci];
@@ -686,17 +707,130 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			}
 		}
 
-		VisitedCluster vc(centroid, std::max(radius, FoodRadius));
+		// Reuse the ID of the closest previous cluster whose centroid is within
+		// eps of this cluster's centroid; otherwise assign a fresh ID.
+		int assignedId = nextClusterId++;
+		argos::Real bestDistSq = epsSq;
+		for(const auto& prev : prevClusters) {
+			argos::Real dSq = (centroid - prev.center).SquareLength();
+			if(dSq < bestDistSq) {
+				bestDistSq = dSq;
+				assignedId = prev.clusterId;
+			}
+		}
+
+		VisitedCluster vc(centroid, std::max(radius, 0.3));
 		vc.visitCount = pts.size();
 		vc.isMerged   = true; // render as magenta
-
+		vc.clusterId  = assignedId;
+		
 		if(radius >= MaxClusterRadius) {
 			// Cap reached — freeze this cluster
-			vc.isFrozen = true;
+			vc.isFrozen = true; // render as cyan
 			FrozenClusters.push_back(vc);
 		}
 
 		VisitedClusters.push_back(vc);
+	}
+
+	// -----------------------------------------------------------------------
+	// 5. Second pass: merge neighbouring VisitedClusters whose centres are
+	//    within eps of each other.  One greedy sweep is performed; clusters
+	//    that reach MaxClusterRadius after merging are added to FrozenClusters.
+	//    The same maxClusterSize cap is reused: the merge is skipped when the
+	//    combined visitCount would exceed it (prevents runaway super-clusters).
+	// -----------------------------------------------------------------------
+	{
+		const size_t nc = VisitedClusters.size();
+		std::vector<bool> merged(nc, false);
+		std::vector<VisitedCluster> mergedClusters;
+
+		for(size_t a = 0; a < nc; ++a) {
+			//if(merged[a]) continue;
+			if(VisitedClusters[a].isFrozen) {
+				// Already frozen clusters are not merged but should be retained in the list.
+				mergedClusters.push_back(VisitedClusters[a]);
+				merged[a] = true;
+				continue;
+			}
+
+			VisitedCluster& ca = VisitedClusters[a];
+			bool didMerge = false;
+
+			// Find the closest overlapping neighbour rather than the first one.
+			size_t bestB    = nc; // invalid sentinel
+			argos::Real bestDistSq = std::numeric_limits<argos::Real>::max();
+
+			for(size_t b = 0; b < nc; ++b) {
+				if(b == a) continue;
+
+				const VisitedCluster& cb = VisitedClusters[b];
+				if(cb.isFrozen) continue;
+
+				// Merge criterion: clusters overlap or one is inside the other.
+				argos::Real distSqPos = (ca.radius + cb.radius) * (ca.radius + cb.radius);
+				argos::Real distSq = (ca.center.GetX() - cb.center.GetX()) * (ca.center.GetX() - cb.center.GetX()) + (ca.center.GetY() - cb.center.GetY()) * (ca.center.GetY() - cb.center.GetY());
+				if(distSq > distSqPos) continue; // completely separate, skip
+
+				if(distSq < bestDistSq) {
+					bestDistSq = distSq;
+					bestB = b;
+				}
+			}
+
+			if(bestB < nc) {
+				VisitedCluster& cb = VisitedClusters[bestB];
+				argos::Real clusterEps = bestDistSq;
+
+				// Calculate new centroid as the midpoint between the two cluster centres.
+				argos::CVector2 newCenter = (ca.center + cb.center) / 2.0;
+
+				// Conservative bounding radius: maximum reach from new centroid.
+				argos::Real ra = (newCenter - ca.center).Length() + ca.radius;
+				argos::Real rb = (newCenter - cb.center).Length() + cb.radius;
+
+				// If one cluster fully contains the other, keep the larger radius.
+				argos::Real d = std::sqrt(clusterEps);
+				if(ca.radius > d + cb.radius) {
+					ra = rb = ca.radius;
+					newCenter = ca.center;
+				} else if(cb.radius > d + ca.radius) {
+					ra = rb = cb.radius;
+					newCenter = cb.center;
+				}
+
+				argos::Real newRadius = std::max({ra, rb, FoodRadius});
+				if(newRadius <= MaxClusterRadius * 1.2) {
+					VisitedCluster vm(newCenter, newRadius);
+					vm.visitCount = ca.visitCount + cb.visitCount;
+					vm.isMerged   = true;
+					vm.clusterId  = ca.clusterId; // inherit ID from first cluster on merge
+
+					if(newRadius >= MaxClusterRadius) {
+						vm.isFrozen = true;
+						// Avoid duplicate frozen clusters.
+						/*bool alreadyFrozen = false;
+						for(const auto& fc : FrozenClusters) {
+							if((fc.center - newCenter).SquareLength() < clusterEps) {
+								alreadyFrozen = true;
+								break;
+							}
+						}
+						if(!alreadyFrozen)*/ FrozenClusters.push_back(vm);
+					}
+
+					mergedClusters.push_back(vm);
+					merged[a] = merged[bestB] = true;
+					didMerge = true;
+				}
+			}
+
+			if(!didMerge) {
+				mergedClusters.push_back(ca);
+			}
+		}
+
+		VisitedClusters = mergedClusters;
 	}
 }
 
@@ -732,42 +866,100 @@ argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 		clusterGrid[gridKey(c.GetX(), c.GetY())].push_back(ci);
 	}
 
-	// --- Count nearby clusters for a query point using the 3×3 cell window ---
-	auto countNearbyClusters = [&](const argos::CVector2& pt) -> int {
+	// --- Enhanced scoring function considering cluster size, count, distance, and visit frequency ---
+	auto calculateExplorationScore = [&](const argos::CVector2& pt) -> argos::Real {
 		long gx = static_cast<long>(std::floor(pt.GetX() / cellSize));
 		long gy = static_cast<long>(std::floor(pt.GetY() / cellSize));
-		int count = 0;
+		
+		argos::Real minDistanceSq = std::numeric_limits<argos::Real>::max();
+		argos::Real coverageScore = 0.0;
+		int clusterCount = 0;
+		argos::Real totalVisitWeight = 0.0;
+		
+		// Scan 3×3 cell window
 		for(long dx = -1; dx <= 1; ++dx) {
 			for(long dy = -1; dy <= 1; ++dy) {
 				auto it = clusterGrid.find(((gx + dx) * 100000L) + (gy + dy));
 				if(it == clusterGrid.end()) continue;
+				
 				for(size_t ci : it->second) {
-					if((pt - VisitedClusters[ci].center).SquareLength() <= searchRadiusSq)
-						++count;
+					const VisitedCluster& cluster = VisitedClusters[ci];
+					argos::CVector2 toCluster = pt - cluster.center;
+					argos::Real distSq = toCluster.SquareLength();
+					
+					// Track minimum distance to any cluster
+					if(distSq < minDistanceSq) {
+						minDistanceSq = distSq;
+					}
+					
+					// Only consider clusters within search radius
+					if(distSq <= searchRadiusSq) {
+						++clusterCount;
+						
+						argos::Real dist = std::sqrt(distSq);
+						
+						// Weighted coverage: larger clusters and those closer to the point
+						// contribute more to making this location "already visited"
+						// Normalized by MaxClusterRadius so values are comparable
+						argos::Real radiusWeight = cluster.radius / MaxClusterRadius;
+						argos::Real distanceWeight = 1.0 - (dist / searchRadius); // closer = higher weight
+						
+						coverageScore += radiusWeight * distanceWeight;
+						
+						// Visit frequency penalty: areas visited more often are less desirable
+						// Log scale to prevent extreme values from dominating
+						totalVisitWeight += std::log(1.0 + cluster.visitCount) * radiusWeight;
+					}
 				}
 			}
 		}
-		return count;
+		
+		// --- Compute final exploration score (higher = better for exploration) ---
+		// We want to maximize distance from visited areas and minimize coverage
+		
+		argos::Real distanceScore = std::sqrt(minDistanceSq) / MaxClusterRadius;
+		// Normalize: max possible distance in arena diagonal
+		argos::Real maxDist = std::sqrt(ForageRangeX.GetSpan() * ForageRangeX.GetSpan() + 
+		                                 ForageRangeY.GetSpan() * ForageRangeY.GetSpan());
+		distanceScore = std::min(distanceScore, maxDist) / maxDist;
+		
+		// Invert coverage and visit weights (lower is better → higher score)
+		argos::Real coveragePenalty = 1.0 / (1.0 + coverageScore);
+		argos::Real visitPenalty = 1.0 / (1.0 + totalVisitWeight);
+		argos::Real countPenalty = 1.0 / (1.0 + clusterCount);
+		
+		// Weighted combination: prioritize distance and low coverage
+		// Weights can be tuned based on exploration strategy
+		argos::Real explorationScore = 
+			0.4 * distanceScore +      // Distance to nearest cluster
+			0.3 * coveragePenalty +    // Spatial coverage by nearby clusters
+			0.2 * countPenalty +       // Number of nearby clusters
+			0.1 * visitPenalty;        // Visit frequency
+		
+		return explorationScore;
 	};
 
-	// --- Sample candidate points and pick the least-covered one ---
-	const int numSamples = 10;
+	// --- Sample candidate points and pick the highest-scoring one ---
+	const int numSamples = 20; // Increased samples for better coverage
 	std::vector<argos::CVector2> samplePoints;
-	std::vector<int>             clusterCounts;
+	std::vector<argos::Real>     explorationScores;
 	samplePoints.reserve(numSamples);
-	clusterCounts.reserve(numSamples);
+	explorationScores.reserve(numSamples);
 
 	for(int i = 0; i < numSamples; ++i) {
 		argos::CVector2 pt(RNG->Uniform(ForageRangeX), RNG->Uniform(ForageRangeY));
 		samplePoints.push_back(pt);
-		clusterCounts.push_back(countNearbyClusters(pt));
+		explorationScores.push_back(calculateExplorationScore(pt));
 	}
 
-	int minCount = *std::min_element(clusterCounts.begin(), clusterCounts.end());
+	// Find maximum score (best for exploration)
+	argos::Real maxScore = *std::max_element(explorationScores.begin(), explorationScores.end());
 
+	// Collect all points within 5% of the best score for randomization
 	std::vector<argos::CVector2> bestPoints;
+	argos::Real threshold = maxScore * 0.95;
 	for(size_t i = 0; i < samplePoints.size(); ++i) {
-		if(clusterCounts[i] == minCount)
+		if(explorationScores[i] >= threshold)
 			bestPoints.push_back(samplePoints[i]);
 	}
 

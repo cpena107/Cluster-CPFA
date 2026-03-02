@@ -211,8 +211,16 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 			Real clusterRadius = loopFunctions.VisitedClusters[i].radius; // Use stored radius
 			Real clusterHeight = 0.02; // Slightly taller
 			
+			if(loopFunctions.VisitedClusters[i].isFrozen) {
+				clusterColor = CColor::BLUE;
+				clusterHeight = 0.02; // Slightly taller for merged clusters
+			}
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), 0.05, clusterHeight, clusterColor);
 			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), clusterRadius, clusterColor, false);
+
+			// Draw cluster ID to the left of the center for debugging
+			DrawText(CVector3(x - clusterRadius - 0.1, y, 0.05),
+			         std::to_string(loopFunctions.VisitedClusters[i].clusterId));
 		}
 	}
 
@@ -242,7 +250,7 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 		if(!isInMergedCluster) {
 			CColor dotColor = CColor::YELLOW;
 			Real dotRadius = 0.05; // Small radius for the dots
-			Real dotArea = 0.25; // Contour of the area covered by the dot (for visualization purposes)
+			Real dotArea = 0.16; // Contour of the area covered by the dot (for visualization purposes)
 			Real dotHeight = 0.01; // Very small height
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), dotRadius, dotHeight, dotColor);
 			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), dotArea, CColor::YELLOW, false); // Add a transparent circle to indicate coverage area
