@@ -1,4 +1,5 @@
 #include "Cluster_loop_functions.h"
+#include <algorithm>
 
 Cluster_loop_functions::Cluster_loop_functions() :
 	RNG(argos::CRandom::CreateRNG("argos")),
@@ -41,7 +42,8 @@ Cluster_loop_functions::Cluster_loop_functions() :
 	SitesCommunicatedSum(0),
 	SitesCommunicatedCount(0),
 	MaxClusterRadius(1.0),
-	numSyntheticPoints(0)
+	numSyntheticPoints(0),
+	nextClusterId(0)
 {}
 
 void Cluster_loop_functions::Init(argos::TConfigurationNode &node) {	
@@ -50,7 +52,7 @@ void Cluster_loop_functions::Init(argos::TConfigurationNode &node) {
 
 	argos::GetNodeAttribute(Cluster_node, "ProbabilityOfSwitchingToSearching", ProbabilityOfSwitchingToSearching);
 	argos::GetNodeAttribute(Cluster_node, "ProbabilityOfReturningToNest",      ProbabilityOfReturningToNest);
-	argos::GetNodeAttributeOrDefault(Cluster_node, "ProbabilityOfSearchingLowClusters", ProbabilityOfSearchingLowClusters, 0.0);
+	argos::GetNodeAttributeOrDefault(Cluster_node, "ProbabilityOfSearchingLowClusters", ProbabilityOfSearchingLowClusters, 0.3);
 	argos::GetNodeAttribute(Cluster_node, "UninformedSearchVariation",         USV_InDegrees);
 	argos::GetNodeAttribute(Cluster_node, "RateOfInformedSearchDecay",         RateOfInformedSearchDecay);
 	argos::GetNodeAttribute(Cluster_node, "RateOfSiteFidelity",                RateOfSiteFidelity);
@@ -145,6 +147,8 @@ void Cluster_loop_functions::Reset() {
 	VisitedLocations.clear();
 	ClusteredVisitedLocations.clear();
 	clusteredLocationIndices.clear();
+	ClusterMap.clear();
+	nextClusterId = 0;
 	numSyntheticPoints = 0;
 
 	SetFoodDistribution();
@@ -571,18 +575,15 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	const size_t  n         = VisitedLocations.size();
 	const argos::Real eps   = .4;
 	const argos::Real epsSq = eps * eps;
-	const size_t  minPts    = 2; // minimum points to form a cluster
+	const size_t  minPts    = 2;
 
 	// -----------------------------------------------------------------------
-	// 1. Mark points already owned by a frozen cluster so DBSCAN skips them.
-	//    A point is "frozen" when it lies within the frozen cluster's bounding
-	//    radius of that cluster's centre.
+	// 1. Mark points owned by frozen clusters so DBSCAN skips them.
 	// -----------------------------------------------------------------------
 	std::vector<bool> frozenPoint(n, false);
 	for(size_t i = 0; i < n; ++i) {
 		for(const auto& fc : FrozenClusters) {
-			argos::Real distSq = (VisitedLocations[i] - fc.center).SquareLength();
-			if(distSq <= fc.radius * fc.radius + epsSq) { // a little slack for border pts
+			if((VisitedLocations[i] - fc.center).SquareLength() <= fc.radius * fc.radius + epsSq) {
 				frozenPoint[i] = true;
 				break;
 			}
@@ -590,25 +591,19 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	}
 
 	// -----------------------------------------------------------------------
-	// 2. Standard DBSCAN on non-frozen points.
-	//    label == -1 → noise/unvisited, label >= 0 → cluster id.
-	//    maxClusterSize caps how many points may join a single cluster per
-	//    pass (seed counts as 1), preventing large merges in one update.
+	// 2. DBSCAN on non-frozen points.
 	// -----------------------------------------------------------------------
-	const size_t maxClusterSize = 6; // seed + up to 2 neighbours per pass
-
+	const size_t maxClusterSize = 6;
 	std::vector<int>  labels(n, -1);
 	std::vector<bool> visited(n, false);
 	int clusterID = 0;
 
-	// Neighbourhood query – ignores frozen points
 	auto getNeighbors = [&](size_t idx) -> std::vector<size_t> {
 		std::vector<size_t> nb;
 		const argos::CVector2& p = VisitedLocations[idx];
 		for(size_t i = 0; i < n; ++i) {
 			if(i == idx || frozenPoint[i]) continue;
-			if((p - VisitedLocations[i]).SquareLength() <= epsSq)
-				nb.push_back(i);
+			if((p - VisitedLocations[i]).SquareLength() <= epsSq) nb.push_back(i);
 		}
 		return nb;
 	};
@@ -616,73 +611,42 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	for(size_t i = 0; i < n; ++i) {
 		if(visited[i] || frozenPoint[i]) continue;
 		visited[i] = true;
-
 		std::vector<size_t> neighbors = getNeighbors(i);
+		if(neighbors.size() < minPts - 1) continue;
 
-		if(neighbors.size() < minPts - 1) {
-			// Not enough neighbours — noise for now; may be absorbed later
-			continue;
-		}
-
-		// Start a new cluster; seed counts as the first member.
 		labels[i] = clusterID;
 		size_t clusterSize = 1;
 		std::vector<size_t> seeds(neighbors.begin(), neighbors.end());
-
 		for(size_t si = 0; si < seeds.size(); ++si) {
-			// Hard cap: stop expanding once the cluster is full for this pass.
 			if(clusterSize >= maxClusterSize) break;
-
 			size_t q = seeds[si];
 			if(frozenPoint[q]) continue;
-
 			if(!visited[q]) {
 				visited[q] = true;
-				// Only propagate neighbourhood if we still have room to grow.
 				if(clusterSize + 1 < maxClusterSize) {
 					std::vector<size_t> qnb = getNeighbors(q);
-					if(qnb.size() >= minPts - 1) {
+					if(qnb.size() >= minPts - 1)
 						seeds.insert(seeds.end(), qnb.begin(), qnb.end());
-					}
 				}
 			}
-			if(labels[q] == -1) {
-				labels[q] = clusterID;
-				++clusterSize;
-			}
+			if(labels[q] == -1) { labels[q] = clusterID; ++clusterSize; }
 		}
 		++clusterID;
 	}
 
 	// -----------------------------------------------------------------------
-	// 3. Build per-cluster point lists
+	// 3. Build per-cluster point lists.
 	// -----------------------------------------------------------------------
 	std::vector<std::vector<size_t>> clusterPoints(clusterID);
-	for(size_t i = 0; i < n; ++i) {
-		if(labels[i] >= 0)
-			clusterPoints[labels[i]].push_back(i);
-	}
+	for(size_t i = 0; i < n; ++i)
+		if(labels[i] >= 0) clusterPoints[labels[i]].push_back(i);
 
 	// -----------------------------------------------------------------------
-	// 4. Compute centroid + bounding radius; freeze clusters that reached cap
+	// 4. Update ClusterMap from DBSCAN output.
+	//    Each DBSCAN cluster finds its closest entry in ClusterMap within eps
+	//    and updates it in-place (ID preserved). Unmatched DBSCAN clusters get
+	//    a fresh entry with a new ID.
 	// -----------------------------------------------------------------------
-
-	// Snapshot previous non-frozen clusters for ID matching before clearing.
-	std::vector<VisitedCluster> prevClusters;
-	for(const auto& vc : VisitedClusters) {
-		if(!vc.isFrozen) prevClusters.push_back(vc);
-	}
-
-	VisitedClusters.clear();
-	// Do NOT clear ClusteredVisitedLocations — it accumulates persistently
-	// across calls so all ever-clustered points remain visible (green).
-
-	// Re-add already-frozen clusters so counts and rendering remain correct
-	for(const auto& fc : FrozenClusters)
-		VisitedClusters.push_back(fc);
-
-	static int nextClusterId = 0;
-
 	for(int ci = 0; ci < clusterID; ++ci) {
 		const std::vector<size_t>& pts = clusterPoints[ci];
 		if(pts.empty()) continue;
@@ -692,146 +656,205 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 		for(size_t idx : pts) centroid += VisitedLocations[idx];
 		centroid /= static_cast<argos::Real>(pts.size());
 
-		// Bounding radius (max distance from centroid to any member point)
+		// Bounding radius
 		argos::Real radius = 0.0;
 		for(size_t idx : pts) {
 			argos::Real d = (centroid - VisitedLocations[idx]).Length();
 			if(d > radius) radius = d;
 		}
+		radius = std::max(radius, FoodRadius); // Minimum radius to cover a single point
 
-		// Add newly-clustered points to the persistent green-dot vector.
-		// clusteredLocationIndices guards against duplicates across calls.
-		for(size_t idx : pts) {
-			if(clusteredLocationIndices.insert(idx).second) {
+		// Accumulate clustered locations (no duplicates)
+		for(size_t idx : pts)
+			if(clusteredLocationIndices.insert(idx).second)
 				ClusteredVisitedLocations.push_back(VisitedLocations[idx]);
+
+		// Find closest ClusterMap entry whose bounding circle contains
+		// (or overlaps) this DBSCAN sub-cluster's centroid. Using
+		// (existing.radius + eps) as the match radius handles large clusters whose
+		// sub-cluster centroids may be well inside the stored circle but far from
+		// its center.
+		int         bestId     = -1;
+		argos::Real bestDistSq = std::numeric_limits<argos::Real>::max();
+		for(auto& [id, vc] : ClusterMap) {
+			if(vc.isFrozen) continue;
+			argos::Real dSq       = (centroid - vc.center).SquareLength();
+			argos::Real threshold = vc.radius + eps;
+			if(dSq > threshold * threshold) continue; // centroid outside reach
+			if(dSq < bestDistSq) { bestDistSq = dSq; bestId = id; }
+		}
+
+		if(bestId != -1) {
+			// Expand existing entry to contain the new sub-cluster — never shrink.
+			// Because DBSCAN is capped at maxClusterSize, a large cluster may be
+			// split across several DBSCAN output clusters each call.  Overwriting
+			// with the sub-cluster's centroid/radius would shrink it.  Instead we
+			// grow the stored circle to the minimum bounding circle that covers both
+			// the old circle and the new sub-cluster: keep the old center, and set
+			// the radius to max(old_radius, dist(old_center, new_centroid) + new_radius).
+			VisitedCluster& existing = ClusterMap.at(bestId);
+			argos::Real reach = (existing.center - centroid).Length() + radius;
+			existing.radius     = std::max(existing.radius, reach);
+			existing.visitCount += pts.size();
+			existing.isMerged   = true;
+			if(existing.radius >= MaxClusterRadius && !existing.isFrozen) {
+				existing.isFrozen = true;
+				FrozenClusters.push_back(existing);
 			}
-		}
-
-		// Reuse the ID of the closest previous cluster whose centroid is within
-		// eps of this cluster's centroid; otherwise assign a fresh ID.
-		int assignedId = nextClusterId++;
-		argos::Real bestDistSq = epsSq;
-		for(const auto& prev : prevClusters) {
-			argos::Real dSq = (centroid - prev.center).SquareLength();
-			if(dSq < bestDistSq) {
-				bestDistSq = dSq;
-				assignedId = prev.clusterId;
+		} else {
+			// New cluster — insert with a fresh ID
+			VisitedCluster vc(centroid, radius);
+			vc.visitCount = pts.size();
+			vc.isMerged   = true;
+			vc.clusterId  = nextClusterId++;
+			if(vc.radius >= MaxClusterRadius) {
+				vc.isFrozen = true;
+				FrozenClusters.push_back(vc);
 			}
+			ClusterMap.emplace(vc.clusterId, vc);
 		}
-
-		VisitedCluster vc(centroid, std::max(radius, 0.3));
-		vc.visitCount = pts.size();
-		vc.isMerged   = true; // render as magenta
-		vc.clusterId  = assignedId;
-		
-		if(radius >= MaxClusterRadius) {
-			// Cap reached — freeze this cluster
-			vc.isFrozen = true; // render as cyan
-			FrozenClusters.push_back(vc);
-		}
-
-		VisitedClusters.push_back(vc);
 	}
 
 	// -----------------------------------------------------------------------
-	// 5. Second pass: merge neighbouring VisitedClusters whose centres are
-	//    within eps of each other.  One greedy sweep is performed; clusters
-	//    that reach MaxClusterRadius after merging are added to FrozenClusters.
-	//    The same maxClusterSize cap is reused: the merge is skipped when the
-	//    combined visitCount would exceed it (prevents runaway super-clusters).
+	// 5. Containment cleanup on ClusterMap.
+	//    If one cluster is fully inside another, remove the smaller one.
 	// -----------------------------------------------------------------------
 	{
-		const size_t nc = VisitedClusters.size();
-		std::vector<bool> merged(nc, false);
-		std::vector<VisitedCluster> mergedClusters;
+		auto eraseFrozenById = [&](int id) {
+			FrozenClusters.erase(
+				std::remove_if(FrozenClusters.begin(), FrozenClusters.end(),
+					[id](const VisitedCluster& vc) { return vc.clusterId == id; }),
+				FrozenClusters.end());
+		};
 
-		for(size_t a = 0; a < nc; ++a) {
-			//if(merged[a]) continue;
-			if(VisitedClusters[a].isFrozen) {
-				// Already frozen clusters are not merged but should be retained in the list.
-				mergedClusters.push_back(VisitedClusters[a]);
-				merged[a] = true;
-				continue;
-			}
+		bool changed = true;
+		while(changed) {
+			changed = false;
+			std::vector<int> ids;
+			ids.reserve(ClusterMap.size());
+			for(const auto& kv : ClusterMap) ids.push_back(kv.first);
 
-			VisitedCluster& ca = VisitedClusters[a];
-			bool didMerge = false;
+			for(size_t i = 0; i < ids.size() && !changed; ++i) {
+				auto ita = ClusterMap.find(ids[i]);
+				if(ita == ClusterMap.end()) continue;
+				for(size_t j = i + 1; j < ids.size(); ++j) {
+					auto itb = ClusterMap.find(ids[j]);
+					if(itb == ClusterMap.end()) continue;
 
-			// Find the closest overlapping neighbour rather than the first one.
-			size_t bestB    = nc; // invalid sentinel
-			argos::Real bestDistSq = std::numeric_limits<argos::Real>::max();
+					VisitedCluster& ca = ita->second;
+					VisitedCluster& cb = itb->second;
+					argos::Real d = (ca.center - cb.center).Length();
 
-			for(size_t b = 0; b < nc; ++b) {
-				if(b == a) continue;
+					const argos::Real tol = 1e-6;
+					bool aContainsB = (ca.radius + tol >= d + cb.radius);
+					bool bContainsA = (cb.radius + tol >= d + ca.radius);
+					if(!aContainsB && !bContainsA) continue;
 
-				const VisitedCluster& cb = VisitedClusters[b];
-				if(cb.isFrozen) continue;
-
-				// Merge criterion: clusters overlap or one is inside the other.
-				argos::Real distSqPos = (ca.radius + cb.radius) * (ca.radius + cb.radius);
-				argos::Real distSq = (ca.center.GetX() - cb.center.GetX()) * (ca.center.GetX() - cb.center.GetX()) + (ca.center.GetY() - cb.center.GetY()) * (ca.center.GetY() - cb.center.GetY());
-				if(distSq > distSqPos) continue; // completely separate, skip
-
-				if(distSq < bestDistSq) {
-					bestDistSq = distSq;
-					bestB = b;
-				}
-			}
-
-			if(bestB < nc) {
-				VisitedCluster& cb = VisitedClusters[bestB];
-				argos::Real clusterEps = bestDistSq;
-
-				// Calculate new centroid as the midpoint between the two cluster centres.
-				argos::CVector2 newCenter = (ca.center + cb.center) / 2.0;
-
-				// Conservative bounding radius: maximum reach from new centroid.
-				argos::Real ra = (newCenter - ca.center).Length() + ca.radius;
-				argos::Real rb = (newCenter - cb.center).Length() + cb.radius;
-
-				// If one cluster fully contains the other, keep the larger radius.
-				argos::Real d = std::sqrt(clusterEps);
-				if(ca.radius > d + cb.radius) {
-					ra = rb = ca.radius;
-					newCenter = ca.center;
-				} else if(cb.radius > d + ca.radius) {
-					ra = rb = cb.radius;
-					newCenter = cb.center;
-				}
-
-				argos::Real newRadius = std::max({ra, rb, FoodRadius});
-				if(newRadius <= MaxClusterRadius * 1.2) {
-					VisitedCluster vm(newCenter, newRadius);
-					vm.visitCount = ca.visitCount + cb.visitCount;
-					vm.isMerged   = true;
-					vm.clusterId  = ca.clusterId; // inherit ID from first cluster on merge
-
-					if(newRadius >= MaxClusterRadius) {
-						vm.isFrozen = true;
-						// Avoid duplicate frozen clusters.
-						/*bool alreadyFrozen = false;
-						for(const auto& fc : FrozenClusters) {
-							if((fc.center - newCenter).SquareLength() < clusterEps) {
-								alreadyFrozen = true;
-								break;
-							}
-						}
-						if(!alreadyFrozen)*/ FrozenClusters.push_back(vm);
+					if(aContainsB && bContainsA) {
+						// Near-identical circles: keep the one with larger visit count
+						if(ca.visitCount >= cb.visitCount) bContainsA = false;
+						else aContainsB = false;
 					}
 
-					mergedClusters.push_back(vm);
-					merged[a] = merged[bestB] = true;
-					didMerge = true;
+					if(aContainsB) {
+						ca.visitCount += cb.visitCount;
+						ca.isMerged = true;
+						eraseFrozenById(cb.clusterId);
+						ClusterMap.erase(cb.clusterId);
+					} else {
+						cb.visitCount += ca.visitCount;
+						cb.isMerged = true;
+						eraseFrozenById(ca.clusterId);
+						ClusterMap.erase(ca.clusterId);
+					}
+
+					changed = true;
+					break;
 				}
 			}
-
-			if(!didMerge) {
-				mergedClusters.push_back(ca);
-			}
 		}
-
-		VisitedClusters = mergedClusters;
 	}
+
+	// -----------------------------------------------------------------------
+	// 5. Merge pass directly on ClusterMap.
+	//    For each cluster, find the closest overlapping neighbor, update ca
+	//    in-place, and erase the consumed cb.  Single greedy pass.
+	// -----------------------------------------------------------------------
+	{
+		std::vector<int> ids;
+		ids.reserve(ClusterMap.size());
+		for(auto& [id, vc] : ClusterMap) ids.push_back(id);
+
+		std::unordered_set<int> erased;
+		for(int idA : ids) {
+			if(erased.count(idA)) continue;
+			auto ita = ClusterMap.find(idA);
+			if(ita == ClusterMap.end()) continue;
+			VisitedCluster& ca = ita->second;
+			if(ca.isFrozen) continue;
+
+			// Find closest overlapping neighbor
+			int         bestId     = -1;
+			argos::Real bestDistSq = std::numeric_limits<argos::Real>::max();
+			for(int idB : ids) {
+				if(idB == idA || erased.count(idB)) continue;
+				auto itb = ClusterMap.find(idB);
+				if(itb == ClusterMap.end()) continue;
+				const VisitedCluster& cb = itb->second;
+				if(cb.isFrozen) continue;
+				argos::Real distSq    = (ca.center - cb.center).SquareLength();
+				argos::Real distSqPos = (ca.radius + cb.radius) * (ca.radius + cb.radius);
+				if(distSq > distSqPos) continue; // no overlap
+				if(distSq < bestDistSq) { bestDistSq = distSq; bestId = idB; }
+			}
+			if(bestId == -1) continue;
+
+			auto itBest = ClusterMap.find(bestId);
+			if(itBest == ClusterMap.end()) continue;
+			const VisitedCluster& cb = itBest->second;
+			argos::Real d = std::sqrt(bestDistSq);
+			argos::CVector2 newCenter;
+			argos::Real     newRadius;
+
+			if(ca.radius >= d + cb.radius) {
+				// ca fully contains cb
+				newCenter = ca.center;
+				newRadius = ca.radius;
+			} else if(cb.radius >= d + ca.radius) {
+				// cb fully contains ca
+				newCenter = cb.center;
+				newRadius = cb.radius;
+			} else {
+				newCenter = (ca.center + cb.center) / 2.0;
+				argos::Real ra = (newCenter - ca.center).Length() + ca.radius;
+				argos::Real rb = (newCenter - cb.center).Length() + cb.radius;
+				newRadius = std::max({ra, rb, FoodRadius});
+			}
+
+			if(newRadius > MaxClusterRadius * 1.2) continue; // would blow cap — skip
+
+			// Update ca in-place; erase cb
+			ca.center      = newCenter;
+			ca.radius      = newRadius;
+			ca.visitCount += cb.visitCount;
+			ca.isMerged    = true;
+			if(newRadius >= MaxClusterRadius && !ca.isFrozen) {
+				ca.isFrozen = true;
+				FrozenClusters.push_back(ca);
+			}
+			erased.insert(bestId);
+			ClusterMap.erase(bestId);
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// 6. Rebuild VisitedClusters vector for rendering from ClusterMap (O(C)).
+	// -----------------------------------------------------------------------
+	VisitedClusters.clear();
+	for(const auto& fc : FrozenClusters)
+		VisitedClusters.push_back(fc);
+	for(auto& [id, vc] : ClusterMap)
+		if(!vc.isFrozen) VisitedClusters.push_back(vc);
 }
 
 /*****
@@ -931,10 +954,10 @@ argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 		// Weighted combination: prioritize distance and low coverage
 		// Weights can be tuned based on exploration strategy
 		argos::Real explorationScore = 
-			0.4 * distanceScore +      // Distance to nearest cluster
-			0.3 * coveragePenalty +    // Spatial coverage by nearby clusters
-			0.2 * countPenalty +       // Number of nearby clusters
-			0.1 * visitPenalty;        // Visit frequency
+			0.1 * distanceScore +      // Distance to nearest cluster
+			0.2 * coveragePenalty +    // Spatial coverage by nearby clusters
+			0.3 * countPenalty +       // Number of nearby clusters
+			0.4 * visitPenalty;        // Visit frequency
 		
 		return explorationScore;
 	};
@@ -965,6 +988,7 @@ argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 
 	if(!bestPoints.empty()) {
 		size_t idx = RNG->Uniform(argos::CRange<argos::UInt32>(0, bestPoints.size()));
+		ProbabilityOfSearchingLowClusters += 0.001; // Increment probability for next time
 		return bestPoints[idx];
 	}
 

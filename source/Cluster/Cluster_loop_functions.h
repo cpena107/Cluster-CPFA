@@ -6,6 +6,7 @@
 #include <argos3/core/simulator/entity/floor_entity.h>
 #include <source/Cluster/Cluster_controller.h>
 #include <unordered_set>
+#include <unordered_map>
 
 using namespace argos;
 using namespace std;
@@ -154,6 +155,8 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		};
 		std::vector<VisitedCluster> VisitedClusters;
         std::vector<VisitedCluster> FrozenClusters; // Store clusters that reached max radius
+		std::unordered_map<int, VisitedCluster> ClusterMap; // persistent map keyed by cluster ID
+		int nextClusterId;
 
 		argos::CRange<argos::Real>   ForageRangeX;
 		argos::CRange<argos::Real>   ForageRangeY;
