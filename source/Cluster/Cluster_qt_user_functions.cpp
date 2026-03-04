@@ -220,7 +220,7 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 
 			// Draw cluster ID to the left of the center for debugging
 			DrawText(CVector3(x - clusterRadius - 0.1, y, 0.05),
-			         std::to_string(loopFunctions.VisitedClusters[i].clusterId));
+			         std::to_string(loopFunctions.VisitedClusters[i].clusterId)+", "+std::to_string(loopFunctions.VisitedClusters[i].radius));
 		}
 	}
 

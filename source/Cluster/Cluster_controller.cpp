@@ -643,6 +643,7 @@ void Cluster_controller::Returning() {
 				SetLowClusterSearchLocation();
 				isInformed = true;
 				isUsingSiteFidelity = false;
+				isLostResource = false; // Reset lost resource flag when intentionally searching underexplored areas
 			}
 			// use random search
 			else {
@@ -658,10 +659,10 @@ void Cluster_controller::Returning() {
 		isHoldingFood = false;
 		
 		// If successfully returned with food, clear visited locations for fresh exploration
-		if(!isLostResource) {
+		/*if(!isLostResource) {
 			ClearVisitedLocations();
 			isSpiralSearching = false; // Reset spiral state
-		}
+		}*/
 		
 		// Always clear the local trail when leaving the nest to start a new trip
 		myTrail.clear();

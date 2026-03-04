@@ -573,7 +573,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	if(VisitedLocations.empty()) return;
 
 	const size_t  n         = VisitedLocations.size();
-	const argos::Real eps   = .4;
+	const argos::Real eps   = .5;
 	const argos::Real epsSq = eps * eps;
 	const size_t  minPts    = 2;
 
@@ -582,9 +582,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// -----------------------------------------------------------------------
 	std::vector<bool> frozenPoint(n, false);
 	for(size_t i = 0; i < n; ++i) {
-		for(const auto& fc : FrozenClusters) {
-			if((VisitedLocations[i] - fc.center).SquareLength() <= fc.radius * fc.radius + epsSq) {
+		for(auto& fc : FrozenClusters) {
+			if((VisitedLocations[i] - fc.center).SquareLength() <= fc.radius * fc.radius) {
 				frozenPoint[i] = true;
+				fc.visitCount++;
+				ClusteredVisitedLocations.push_back(VisitedLocations[i]);
 				break;
 			}
 		}
@@ -593,7 +595,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// -----------------------------------------------------------------------
 	// 2. DBSCAN on non-frozen points.
 	// -----------------------------------------------------------------------
-	const size_t maxClusterSize = 6;
+	const size_t maxClusterSize = 4;
 	std::vector<int>  labels(n, -1);
 	std::vector<bool> visited(n, false);
 	int clusterID = 0;
@@ -727,6 +729,28 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				FrozenClusters.end());
 		};
 
+		auto circleIntersectionArea = [&](argos::Real r1, argos::Real r2, argos::Real d) -> argos::Real {
+			const argos::Real PI = std::acos(-1.0);
+			if(d >= r1 + r2) return 0.0; // disjoint
+			if(d <= std::fabs(r1 - r2)) {
+				argos::Real rMin = std::min(r1, r2);
+				return PI * rMin * rMin; // one circle fully inside the other
+			}
+
+			argos::Real c1 = (d * d + r1 * r1 - r2 * r2) / (2.0 * d * r1);
+			argos::Real c2 = (d * d + r2 * r2 - r1 * r1) / (2.0 * d * r2);
+			c1 = std::max(static_cast<argos::Real>(-1.0), std::min(static_cast<argos::Real>(1.0), c1));
+			c2 = std::max(static_cast<argos::Real>(-1.0), std::min(static_cast<argos::Real>(1.0), c2));
+
+			argos::Real a1 = r1 * r1 * std::acos(c1);
+			argos::Real a2 = r2 * r2 * std::acos(c2);
+			argos::Real a3 = 0.5 * std::sqrt(
+				std::max(static_cast<argos::Real>(0.0),
+					(-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2)));
+
+			return a1 + a2 - a3;
+		};
+
 		bool changed = true;
 		while(changed) {
 			changed = false;
@@ -745,28 +769,25 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 					VisitedCluster& cb = itb->second;
 					argos::Real d = (ca.center - cb.center).Length();
 
-					const argos::Real tol = 1e-6;
-					bool aContainsB = (ca.radius + tol >= d + cb.radius);
-					bool bContainsA = (cb.radius + tol >= d + ca.radius);
-					if(!aContainsB && !bContainsA) continue;
-
-					if(aContainsB && bContainsA) {
-						// Near-identical circles: keep the one with larger visit count
-						if(ca.visitCount >= cb.visitCount) bContainsA = false;
-						else aContainsB = false;
+					// Remove the smaller circle when >=95% of its area lies inside the larger one.
+					argos::Real intersection = circleIntersectionArea(ca.radius, cb.radius, d);
+					VisitedCluster* smaller = &ca;
+					VisitedCluster* larger = &cb;
+					if(ca.radius > cb.radius) {
+						smaller = &cb;
+						larger = &ca;
 					}
 
-					if(aContainsB) {
-						ca.visitCount += cb.visitCount;
-						ca.isMerged = true;
-						eraseFrozenById(cb.clusterId);
-						ClusterMap.erase(cb.clusterId);
-					} else {
-						cb.visitCount += ca.visitCount;
-						cb.isMerged = true;
-						eraseFrozenById(ca.clusterId);
-						ClusterMap.erase(ca.clusterId);
-					}
+					const argos::Real PI = std::acos(-1.0);
+					argos::Real smallerArea = PI * smaller->radius * smaller->radius;
+					if(smallerArea <= 1e-9) continue;
+					argos::Real overlapRatio = intersection / smallerArea;
+					if(overlapRatio < 0.95) continue;
+
+					larger->visitCount += smaller->visitCount;
+					larger->isMerged = true;
+					eraseFrozenById(smaller->clusterId);
+					ClusterMap.erase(smaller->clusterId);
 
 					changed = true;
 					break;
@@ -988,7 +1009,7 @@ argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 
 	if(!bestPoints.empty()) {
 		size_t idx = RNG->Uniform(argos::CRange<argos::UInt32>(0, bestPoints.size()));
-		ProbabilityOfSearchingLowClusters += 0.001; // Increment probability for next time
+		ProbabilityOfSearchingLowClusters += 0.01; // Increment probability for next time
 		return bestPoints[idx];
 	}
 
