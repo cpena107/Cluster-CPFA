@@ -7,14 +7,16 @@ BASE_DIR=$(pwd)
 
 # Find all directories matching resource_collection_analysis_*
 # We use sort to process them in a predictable order
-for analysis_dir in $(ls -d resource_collection_analysis_* | sort); do
+for analysis_dir in $(ls -d resource_collection_all/resource_collection_analysis* | sort); do
     if [ -d "$analysis_dir" ]; then
         echo "=================================================="
         echo "Processing Analysis Directory: $analysis_dir"
         echo "=================================================="
-        # 5, 10, 15, and 20 seconds
-        secs=$(echo "$analysis_dir" | grep -oP '(?<=_)[0-9]+(?=_seconds)')
-        # Define the 3 distribution subfolders
+        # Skip arena size not 14x14
+        if [[ "$analysis_dir" != *"14_14"* ]]; then
+            echo "  -> [SKIP] Not a 14x14 arena analysis directory"
+            continue
+        fi
         distributions=("cluster_distribution" "powerlaw_distribution" "random_distribution")
         
         for dist in "${distributions[@]}"; do
@@ -35,7 +37,7 @@ for analysis_dir in $(ls -d resource_collection_analysis_* | sort); do
                         mkdir -p "$BASE_DIR/analysis_plots_${analysis_dir#resource_collection_analysis_}"
                         # Move the generated plot files to the base directory under analysis_plots_#_sites
                         mv *resource_analysis_plot.* "$BASE_DIR/analysis_plots_${analysis_dir#resource_collection_analysis_}/"
-                        echo "     [SUCCESS]"
+                        echo "     [SUCCESS] moved generated plots to $BASE_DIR/analysis_plots_${analysis_dir#resource_collection_analysis_}/"
                     else
                         echo "     [FAILURE] Script returned non-zero exit code"
                     fi

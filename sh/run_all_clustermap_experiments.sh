@@ -1,12 +1,17 @@
 #!/bin/bash
 
 # Script to run all CPFA_ClusterMap experiments with proper output file naming
-# Output files follow the pattern: Cluster_GPFA_20sites_{n}res_14x14.csv
+# Output files follow the pattern: Cluster_CPFA_{m}sites_{n}res_{distribution}.csv
 # where n is the last number extracted from the experiment filename
 
 NUM_RUNS=${1:-10}  # Default to 10 runs if not specified
 OUTPUT_DIR=${2:-"."}  # Default to current directory if not specified
-
+VISITED_TOLERANCE=${3:-0.5}  # Default visited tolerance
+RECORDING_FREQ=${4:-2}  # Default recording frequency
+MAX_VISITED=${5:-50}  # Default max visited locations
+MAX_RADIUS=${6:-1.0}  # Default max cluster radius
+ARENA_X=${7:-14.0}  # Default arena size X
+ARENA_Y=${8:-14.0}  # Default arena size Y
 # Create output directory if it doesn't exist
 if [ ! -d "$OUTPUT_DIR" ]; then
     echo "Creating output directory: $OUTPUT_DIR"
@@ -20,23 +25,47 @@ echo "Output directory: $OUTPUT_DIR"
 echo "========================================"
 echo ""
 
+# Generation is now handled by the calling python script
+# if [ -f "scripts/generate_experiments.py" ]; then
+#     python3 scripts/generate_experiments.py \
+#       --visited-tolerance ${VISITED_TOLERANCE} \
+#       --recording-freq ${RECORDING_FREQ} \
+#       --max-visited ${MAX_VISITED} \
+#       --max-radius ${MAX_RADIUS} \
+#       --arena-x ${ARENA_X} \
+#       --arena-y ${ARENA_Y} \
+#       --output-dir ${OUTPUT_DIR}
+# elif [ -f "generate_experiments.py" ]; then
+#     python3 generate_experiments.py \
+#       --visited-tolerance ${VISITED_TOLERANCE} \
+#       --recording-freq ${RECORDING_FREQ} \
+#       --max-visited ${MAX_VISITED} \
+#       --max-radius ${MAX_RADIUS} \
+#       --arena-x ${ARENA_X} \
+#       --arena-y ${ARENA_Y} \
+#       --output-dir ${OUTPUT_DIR}
+# else
+#     echo "Error: generate_experiments.py not found!"
+#     exit 1
+# fi
+
 # Array to store experiment files
 EXPERIMENTS=(
-    "experiments/CPFA_ClusterMap_clustered_16.xml"
-    "experiments/CPFA_ClusterMap_clustered_32.xml"
-    "experiments/CPFA_ClusterMap_clustered_48.xml"
-    "experiments/CPFA_ClusterMap_clustered_64.xml"
-    "experiments/CPFA_ClusterMap_clustered_80.xml"
-    "experiments/CPFA_ClusterMap_random_16.xml"
-    "experiments/CPFA_ClusterMap_random_32.xml"
-    "experiments/CPFA_ClusterMap_random_48.xml"
-    "experiments/CPFA_ClusterMap_random_64.xml"
-    "experiments/CPFA_ClusterMap_random_80.xml"
-    "experiments/CPFA_ClusterMap_semi_cluster_16.xml"
-    "experiments/CPFA_ClusterMap_semi_cluster_32.xml"
-    "experiments/CPFA_ClusterMap_semi_cluster_48.xml"
-    "experiments/CPFA_ClusterMap_semi_cluster_64.xml"
-    "experiments/CPFA_ClusterMap_semi_cluster_80.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_clustered_16.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_clustered_32.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_clustered_48.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_clustered_64.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_clustered_80.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_random_16.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_random_32.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_random_48.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_random_64.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_random_80.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_semi_cluster_16.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_semi_cluster_32.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_semi_cluster_48.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_semi_cluster_64.xml"
+    "${OUTPUT_DIR}/CPFA_ClusterMap_semi_cluster_80.xml"
 )
 
 # Function to extract the last number from filename
@@ -63,7 +92,7 @@ run_experiment() {
     TYPE=$(echo "$XML_FILE" | grep -oE 'clustered|random|semi_cluster')
     
     # Generate output filename
-    OUTPUT_FILE="${OUTPUT_DIR}/Cluster_CPFA_${NUM}res_14x14_${TYPE}.csv"
+    OUTPUT_FILE="${OUTPUT_DIR}/Cluster_CPFA_${NUM}res_${TYPE}.csv"
     
     echo "----------------------------------------"
     echo "Processing: $XML_FILE"
