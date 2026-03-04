@@ -1,0 +1,70 @@
+import os
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
+
+# Configuration
+NUM_WORKERS = 3  # Based on 48 cores / 15 tasks per experiment
+NUM_RUNS = 30
+
+# Parameters
+visited_tolerances = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+recording_freqs = [1, 2, 3, 4, 5]
+max_visiteds = [25, 50, 75, 100]
+max_radii = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+arena_xs = [8, 10, 12, 14]
+
+def get_missing_experiments():
+    missing = []
+    for visited_tolerance in visited_tolerances:
+        for recording_freq in recording_freqs:
+            for max_visited in max_visiteds:
+                for max_radius in max_radii:
+                    for arena_x in arena_xs:
+                        # Directory name logic
+                        dir_name = f"tol_{visited_tolerance}m_freq_{recording_freq}s_visited_{max_visited}_radius_{max_radius}m_arena_{arena_x}_{arena_x}"
+                        path = os.path.join("experiments", dir_name)
+                        
+                        if not os.path.isdir(path):
+                            # Command arguments
+                            args = [
+                                "./run_all_clustermap_experiments.sh",
+                                str(NUM_RUNS),
+                                path,
+                                str(visited_tolerance),
+                                str(recording_freq),
+                                str(max_visited),
+                                str(max_radius),
+                                str(arena_x),
+                                str(arena_x)
+                            ]
+                            missing.append((path, args))
+    return missing
+
+def run_task(task):
+    path, args = task
+    print(f"STARTING: {path}")
+    try:
+        # Create directory first
+        os.makedirs(path, exist_ok=True)
+        
+        # Run the experiment script
+        # Capture output to avoid terminal interleaving mess, or redirect to a log file
+        log_file = os.path.join(path, "experiment.log")
+        with open(log_file, "w") as f:
+            subprocess.run(args, stdout=f, stderr=subprocess.STDOUT, check=True)
+            
+        print(f"COMPLETED: {path}")
+    except subprocess.CalledProcessError as e:
+        print(f"FAILED: {path} with error {e}")
+    except Exception as e:
+        print(f"ERROR: {path}: {e}")
+
+def main():
+    tasks = get_missing_experiments()
+    print(f"Found {len(tasks)} missing experiments. Running {NUM_WORKERS} in parallel...")
+    
+    with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+        executor.map(run_task, tasks)
+
+if __name__ == "__main__":
+    main()
