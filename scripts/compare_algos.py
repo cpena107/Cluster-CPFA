@@ -1,6 +1,16 @@
+"""
+Script to compare CPFA, GCFA, and CCPFA algorithms across different resource counts and distributions.
+For each analysis directory (e.g. resource_collection_analysis_5_seconds), it looks for subfolders like 
+cluster_distribution, powerlaw_distribution, and random_distribution. Within each, it finds resource-count
+subfolders (e.g. 8_resources, 16_resources, etc.) and reads the relevant CSV files to extract mean cumulative 
+times at milestone_percent == 100. It prints a summary table for each distribution type.
+"""
+
+
 import os
 import glob
 import re
+import shutil
 import pandas as pd
 
 def _find_resource_counts(root_dir):
@@ -70,11 +80,28 @@ def calculate_means(root_dir):
     print("-" * 30)
 
 if __name__ == "__main__":
-    # calculate means for each distribution type for 25, 50, 75, 100, 125, 150, 175,
-    # 200, 225, 250, 275, 300, 500 sites
-    for sites in [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 500]:
-        for secs in [5, 10, 15, 20]:
-            base = f"resource_collection_analysis_{sites}_sites_{secs}_seconds"
-            calculate_means(os.path.join(base, "cluster_distribution"))
-            calculate_means(os.path.join(base, "random_distribution"))
-            calculate_means(os.path.join(base, "powerlaw_distribution"))
+    experiments_path = "experiments"
+    source_folder = "resource_collection_analysis"
+    
+    # Check if experiments folder exists
+    if not os.path.exists(experiments_path):
+        print(f"Error: {experiments_path} not found.")
+        exit(1)
+        
+    # Get all subdirectories in experiments/
+    exp_folders = [f for f in os.listdir(experiments_path) if os.path.isdir(os.path.join(experiments_path, f))]
+    exp_folders.sort() # sort for consistency
+
+    for folder_name in exp_folders:
+        new_folder_name = os.path.join("resource_collection_all", f"{source_folder}_{folder_name}")
+        
+        # Copy folder
+        if not os.path.exists(new_folder_name):
+            print(f"Copying {source_folder} to {new_folder_name}")
+            shutil.copytree(source_folder, new_folder_name)
+        else:
+            print(f"Folder {new_folder_name} already exists.")
+            
+        calculate_means(os.path.join(new_folder_name, "cluster_distribution"))
+        calculate_means(os.path.join(new_folder_name, "random_distribution"))
+        calculate_means(os.path.join(new_folder_name, "powerlaw_distribution"))
