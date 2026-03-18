@@ -101,6 +101,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 	argos::Real ProbabilityOfSwitchingToSearching;
 	argos::Real ProbabilityOfReturningToNest;
 	argos::Real ProbabilityOfSearchingLowClusters;
+	argos::Real InitialProbabilityOfSearchingLowClusters;
 	argos::CRadians UninformedSearchVariation;
 	argos::Real RateOfInformedSearchDecay;
 	argos::Real RateOfSiteFidelity;
@@ -123,7 +124,11 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		std::vector<argos::CRay3>    SearchLocationRays;
         std::map<std::string, std::vector<argos::CRay3>> RobotTrails;
         std::map<std::string, CColor> RobotTrailColors;
+		// New visited locations reported since the previous clustering update.
 		std::vector<argos::CVector2> VisitedLocations;
+		// Historical singleton visited locations that did not merge into a cluster.
+		// This acts as memoized "existing visited locations".
+		std::vector<argos::CVector2> ExistingVisitedLocations;
 		// Snapshot of real robot-visit points that contributed to a cluster in the
 		// most recent DBSCAN run.  Populated each UpdateVisitedClusters() call
 		// (before compression) so the renderer can highlight them for debugging.
@@ -141,17 +146,12 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		/* Cluster structure for visited locations */
 		struct VisitedCluster {
 			argos::CVector2 center;
-			// originalCenter is locked at formation and only replaced on a merge event.
-			// It anchors the centroid so drift is bounded to maxDrift (0.3 m) between updates.
-			argos::CVector2 originalCenter;
 			argos::Real radius;
 			size_t visitCount;
-			bool isMerged;
-            bool isFrozen;
 			int clusterId; // unique ID for debugging
 			
 			VisitedCluster(argos::CVector2 c, argos::Real r) 
-				: center(c), originalCenter(c), radius(r), visitCount(0), isMerged(false), isFrozen(false), clusterId(-1) {}
+				: center(c), radius(r), visitCount(0), clusterId(-1) {}
 		};
 		std::vector<VisitedCluster> VisitedClusters;
         std::vector<VisitedCluster> FrozenClusters; // Store clusters that reached max radius

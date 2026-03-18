@@ -87,6 +87,7 @@ class Cluster_controller : public BaseController {
 	/* Memory-based search functions */
 	void RecordVisitedLocation(argos::CVector2 location);
 	bool HasVisitedLocation(argos::CVector2 location, argos::Real tolerance);
+	bool HasNearbyFood(argos::CVector2 location, argos::Real toleranceSquared);
 	void SetUnvisitedSearchLocation();
 	void ShareVisitedLocationsWithNest();
 	void ClearVisitedLocations();
@@ -103,6 +104,7 @@ class Cluster_controller : public BaseController {
 
 	/* Memory of visited locations */
 	std::vector<argos::CVector2> VisitedLocations;
+	std::vector<argos::CVector2> ExistingLocations;
 	std::vector<argos::CVector2> UnsharedLocations;
 	argos::Real VisitedLocationTolerance;
 	argos::Real RecordingFrequency;
@@ -120,6 +122,8 @@ class Cluster_controller : public BaseController {
 	argos::Real spiralRadius;
     argos::Real spiralStepAngle;
     argos::Real spiralGrowthRate;
+	size_t MaxSpiralCollisions;
+	size_t spiralCollisionStartCount;
 	
 };
 

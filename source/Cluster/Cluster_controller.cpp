@@ -25,7 +25,9 @@ Cluster_controller::Cluster_controller() :
 	spiralPathIndex(0),
 	spiralRadius(0.0),
     spiralStepAngle(0.3), // Approx 17 degrees
-    spiralGrowthRate(0.01) // Small outward growth
+    spiralGrowthRate(0.01), // Small outward growth
+	MaxSpiralCollisions(5),
+	spiralCollisionStartCount(0)
 {
 	// Start in SEARCHING state instead of DEPARTING
 	Cluster_state = SEARCHING;
@@ -51,6 +53,7 @@ void Cluster_controller::Init(argos::TConfigurationNode &node) {
 	argos::GetNodeAttribute(settings, "RecordingFrequency",      RecordingFrequency);
 	argos::GetNodeAttribute(settings, "MaxVisitedLocations",      MaxVisitedLocations);
 	argos::GetNodeAttribute(settings, "MaxClusterRadius",      MaxClusterRadius);
+	argos::GetNodeAttributeOrDefault(settings, "MaxSpiralCollisions", MaxSpiralCollisions, MaxSpiralCollisions);
 	
 	// Memory-based search parameter (optional, defaults to 0.3)
 	argos::GetNodeAttributeOrDefault(settings, "VisitedLocationTolerance", VisitedLocationTolerance, VisitedLocationTolerance);
@@ -299,6 +302,23 @@ void Cluster_controller::Departing() {
 	argos::Real distanceToTarget = (GetPosition() - GetTarget()).Length();
 	argos::Real randomNumber = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 
+	const bool isLowClusterInformedTrip =
+		(LoopFunctions->LowClusterTargetList.find(controllerID) != LoopFunctions->LowClusterTargetList.end());
+
+	// Record memory while traveling toward low-cluster informed targets.
+	if(isLowClusterInformedTrip &&
+	   SimulationTick() % (size_t)(SimulationTicksPerSecond() * RecordingFrequency) == 0) {
+		RecordVisitedLocation(GetPosition());
+	}
+
+	// Rule 2: while travelling to a low-cluster informed target, allow immediate pickup.
+	if(isLowClusterInformedTrip && (SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
+		SetHoldingFood();
+		if(IsHoldingFood()) {
+			return;
+		}
+	}
+
 	/*
 	ofstream log_output_stream;
 	log_output_stream.open("Cluster_log.txt", ios::app);
@@ -310,29 +330,31 @@ void Cluster_controller::Departing() {
 	/* When not informed, continue to travel until randomly switching to the searching state. */
 	if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
 		if(!isInformed){
-   if(randomNumber < LoopFunctions->ProbabilityOfSwitchingToSearching && GetTarget() != argos::CVector2(0,0)) {
-     Stop();
-     SearchTime = 0;
-			  Cluster_state = SEARCHING;
-			  argos::Real USV = LoopFunctions->UninformedSearchVariation.GetValue();
-			  argos::Real rand = RNG->Gaussian(USV);
-			  argos::CRadians rotation(rand);
-			  argos::CRadians angle1(rotation.UnsignedNormalize());
-			  argos::CRadians angle2(GetHeading().UnsignedNormalize());
-			  argos::CRadians turn_angle(angle1 + angle2);
-			  argos::CVector2 turn_vector(SearchStepSize, turn_angle);
-            
-			  SetIsHeadingToNest(false);
-			  SetTarget(turn_vector + GetPosition());
-		  }
-    else if(distanceToTarget < TargetDistanceTolerance) {
-     SetRandomSearchLocation();
-    }
-  }
+			if(randomNumber < LoopFunctions->ProbabilityOfSwitchingToSearching && GetTarget() != argos::CVector2(0,0)) {
+				Stop();
+				SearchTime = 0;
+				Cluster_state = SEARCHING;
+				argos::Real USV = LoopFunctions->UninformedSearchVariation.GetValue();
+				argos::Real rand = RNG->Gaussian(USV);
+				argos::CRadians rotation(rand);
+				argos::CRadians angle1(rotation.UnsignedNormalize());
+				argos::CRadians angle2(GetHeading().UnsignedNormalize());
+				argos::CRadians turn_angle(angle1 + angle2);
+				argos::CVector2 turn_vector(SearchStepSize, turn_angle);
+				
+				SetIsHeadingToNest(false);
+				SetTarget(turn_vector + GetPosition());
+			}
+			else if(distanceToTarget < TargetDistanceTolerance) {
+				SetRandomSearchLocation();
+			}
+		}
 	}
 	
 	/* Are we informed? I.E. using site fidelity or pheromones. */	
 	if(isInformed && distanceToTarget < TargetDistanceTolerance) {
+		const bool wasLowClusterTarget =
+			(LoopFunctions->LowClusterTargetList.find(controllerID) != LoopFunctions->LowClusterTargetList.end());
 	
 		//ofstream log_output_stream;
 		//log_output_stream.open("Cluster_log.txt", ios::app);
@@ -347,6 +369,18 @@ void Cluster_controller::Departing() {
 			SetFidelityList();
 			//log_output_stream << "After SetFidelityList: " << SiteFidelityPosition << endl;
 			//log_output_stream.close();
+		}
+
+		// Rule 3: low-cluster informed arrival starts spiral only if no nearby food.
+		if(wasLowClusterTarget && !IsHoldingFood()) {
+			SetHoldingFood();
+			if(!IsHoldingFood() && !HasNearbyFood(GetPosition(), FoodDistanceTolerance)) {
+				isSpiralSearching = true;
+				spiralCenter = GetPosition();
+				spiralPathIndex = 0;
+				spiralCollisionStartCount = collision_counter;
+				SetSpiralSearchLocation();
+			}
 		}
 	}
 }
@@ -367,6 +401,7 @@ void Cluster_controller::DetectLostResource() {
 		    spiralCenter = GetPosition(); // Center spiral on current location (where resource was expected)
 		    spiralPathIndex = 0;
 		    spiralGrowthRate = 0.05; // Adjust growth rate as needed
+			spiralCollisionStartCount = collision_counter;
 		}
 		
 		// Don't switch to uninformed search immediately if we are spiraling
@@ -401,16 +436,16 @@ void Cluster_controller::Searching() {
 
 			// randomly give up searching
 			if(random < LoopFunctions->ProbabilityOfReturningToNest) {
-             SetFidelityList();
-   	         TrailToShare.clear();
+				SetFidelityList();
+				TrailToShare.clear();
 				SetIsHeadingToNest(true);
 				SetTarget(LoopFunctions->NestPosition);
 				isGivingUpSearch = true;
-	         LoopFunctions->FidelityList.erase(controllerID);
-	         LoopFunctions->LowClusterTargetList.erase(controllerID);
-             isUsingSiteFidelity = false; 
-             updateFidelity = false; 
-             isLostResource = false;
+				LoopFunctions->FidelityList.erase(controllerID);
+				LoopFunctions->LowClusterTargetList.erase(controllerID);
+				isUsingSiteFidelity = false; 
+				updateFidelity = false; 
+				isLostResource = false;
 				Cluster_state = RETURNING;
 			
 				/*
@@ -629,12 +664,6 @@ void Cluster_controller::Returning() {
 			SetTarget(SiteFidelityPosition);
 			isInformed = true;
 		}
-		// use pheromone waypoints
-		else if(SetTargetPheromone() == true) {
-			//log_output_stream << "Using site pheremone" << endl;	    
-			isInformed = true;
-			isUsingSiteFidelity = false;
-		}
 		// probabilistically use low-cluster search (underexplored areas)
 		else {
 			argos::Real r3 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
@@ -645,7 +674,13 @@ void Cluster_controller::Returning() {
 				isUsingSiteFidelity = false;
 				isLostResource = false; // Reset lost resource flag when intentionally searching underexplored areas
 			}
-			// use random search
+			// use pheromone waypoints (third priority)
+			else if(SetTargetPheromone() == true) {
+				//log_output_stream << "Using site pheremone" << endl;
+				isInformed = true;
+				isUsingSiteFidelity = false;
+			}
+			// use random search (last priority)
 			else {
 				//log_output_stream << "Using random search" << endl;	    
 				SetRandomSearchLocation();
@@ -1006,7 +1041,6 @@ void Cluster_controller::UpdateTargetRayList() {
 void Cluster_controller::RecordVisitedLocation(argos::CVector2 location) {
 	// Check if this location is already in memory (within tolerance) and within ForageRange before adding to memory
 	if(!HasVisitedLocation(location, VisitedLocationTolerance) && IsWithinForageRange(location)) {
-		VisitedLocations.push_back(location);
 		UnsharedLocations.push_back(location);
 		
 		// Limit memory size to prevent unbounded growth
@@ -1028,8 +1062,8 @@ bool Cluster_controller::IsWithinForageRange(argos::CVector2 location) {
 bool Cluster_controller::HasVisitedLocation(argos::CVector2 location, argos::Real tolerance) {
 	argos::Real toleranceSquared = tolerance * tolerance;
 	
-	for(size_t i = 0; i < VisitedLocations.size(); i++) {
-		if((location - VisitedLocations[i]).SquareLength() < toleranceSquared) {
+	for(size_t i = 0; i < UnsharedLocations.size(); i++) {
+		if((location - UnsharedLocations[i]).SquareLength() < toleranceSquared) {
 			return true;
 		}
 	}
@@ -1088,11 +1122,11 @@ void Cluster_controller::SetUnvisitedSearchLocation() {
 	SetTarget(candidate);
 	
 	// If we exhausted all attempts, clear some visited locations to allow re-exploration
-	if(!foundUnvisited && VisitedLocations.size() > MaxVisitedLocations / 2) {
+	//if(!foundUnvisited && VisitedLocations.size() > MaxVisitedLocations / 2) {
 		// Remove the oldest half of visited locations
-		VisitedLocations.erase(VisitedLocations.begin(), 
-		                       VisitedLocations.begin() + VisitedLocations.size() / 2);
-	}
+	//	VisitedLocations.erase(VisitedLocations.begin(), 
+	//	                       VisitedLocations.begin() + VisitedLocations.size() / 2);
+	//}
 }
 
 /*****
@@ -1102,7 +1136,7 @@ void Cluster_controller::SetUnvisitedSearchLocation() {
  *****/
 void Cluster_controller::ShareVisitedLocationsWithNest() {
 	// Compute how many sites this robot is communicating
-	size_t communicatedSites = VisitedLocations.size();
+	size_t communicatedSites = UnsharedLocations.size();
 	// Update running average in loop functions
 	if(LoopFunctions) {
 		LoopFunctions->RecordSitesCommunicated(communicatedSites);
@@ -1120,36 +1154,12 @@ void Cluster_controller::ShareVisitedLocationsWithNest() {
 }
 
 /*****
- * Clear the memory of visited locations. Called when starting a fresh search.
- *****/
-void Cluster_controller::ClearVisitedLocations() {
-	VisitedLocations.clear();
-	isLostResource = false;
-}
-
-/*****
  * Set target for spiral search pattern around a central point.
  * Used when returning to a visited location/pheromone without finding food immediately.
  *****/
 void Cluster_controller::SetSpiralSearchLocation() {
     argos::Real maxRadius = MaxClusterRadius; // Default max radius if no super cluster found
-    
-    // Find if we are near a super cluster to determine radius
-    /*if(LoopFunctions != NULL) {
-        for(const auto& cluster : LoopFunctions->VisitedClusters) {
-            if(cluster.isMerged) {
-                argos::Real dist = (GetPosition() - cluster.center).Length();
-                argos::Real clusterR = cluster.radius;
-                
-                // If we are within or near this super cluster
-                if(dist < clusterR * 1.5) {
-                    maxRadius = clusterR;
-                    break;
-                }
-            }
-        }
-    }*/
-    
+
     // Calculate next spiral point
     // parametric equation for spiral: x = (a + b*theta) * cos(theta), y = (a + b*theta) * sin(theta)
     // where a is start radius, b is growth rate
@@ -1158,7 +1168,7 @@ void Cluster_controller::SetSpiralSearchLocation() {
     argos::Real currentRadius = spiralGrowthRate * angle; // Archimedian spiral starting from center
     
     // Reset if we exceed the super cluster radius
-    if(currentRadius > maxRadius) {
+    if((collision_counter - spiralCollisionStartCount) > MaxSpiralCollisions || currentRadius > maxRadius) {
         isSpiralSearching = false;
         spiralPathIndex = 0;
         // Fall back to random search or other behavior
@@ -1175,6 +1185,15 @@ void Cluster_controller::SetSpiralSearchLocation() {
     SetIsHeadingToNest(false);
     SetTarget(target);
     spiralPathIndex++;
+}
+
+bool Cluster_controller::HasNearbyFood(argos::CVector2 location, argos::Real toleranceSquared) {
+	for(const auto& foodPos : LoopFunctions->FoodList) {
+		if((location - foodPos).SquareLength() <= toleranceSquared) {
+			return true;
+		}
+	}
+	return false;
 }
 
 REGISTER_CONTROLLER(Cluster_controller, "Cluster_controller")

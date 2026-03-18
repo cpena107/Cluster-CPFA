@@ -4,12 +4,12 @@
 # Output files follow the pattern: Cluster_CPFA_{m}sites_{n}res_{distribution}.csv
 # where n is the last number extracted from the experiment filename
 
-NUM_RUNS=${1:-10}  # Default to 10 runs if not specified
+NUM_RUNS=${1:-30}  # Default to 30 runs if not specified
 OUTPUT_DIR=${2:-"."}  # Default to current directory if not specified
 VISITED_TOLERANCE=${3:-0.5}  # Default visited tolerance
 RECORDING_FREQ=${4:-2}  # Default recording frequency
 MAX_VISITED=${5:-50}  # Default max visited locations
-MAX_RADIUS=${6:-1.0}  # Default max cluster radius
+MAX_RADIUS=${6:-0.75}  # Default max cluster radius
 ARENA_X=${7:-14.0}  # Default arena size X
 ARENA_Y=${8:-14.0}  # Default arena size Y
 # Create output directory if it doesn't exist

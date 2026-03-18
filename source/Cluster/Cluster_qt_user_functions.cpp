@@ -200,9 +200,9 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 	// Draw merged clusters as larger magenta dots, or individual yellow dots
 	Real x, y;
 	
-	// First, draw merged clusters (areas with >50% coverage)
+	// First, draw merged clusters 
 	for(size_t i = 0; i < loopFunctions.VisitedClusters.size(); i++) {
-		if(loopFunctions.VisitedClusters[i].isMerged) {
+		//if(loopFunctions.VisitedClusters[i].isMerged) {
 			x = loopFunctions.VisitedClusters[i].center.GetX();
 			y = loopFunctions.VisitedClusters[i].center.GetY();
 			
@@ -211,17 +211,17 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 			Real clusterRadius = loopFunctions.VisitedClusters[i].radius; // Use stored radius
 			Real clusterHeight = 0.02; // Slightly taller
 			
-			if(loopFunctions.VisitedClusters[i].isFrozen) {
+			/*if(loopFunctions.VisitedClusters[i].isFrozen) {
 				clusterColor = CColor::BLUE;
 				clusterHeight = 0.02; // Slightly taller for merged clusters
-			}
+			}*/
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), 0.05, clusterHeight, clusterColor);
 			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), clusterRadius, clusterColor, false);
 
 			// Draw cluster ID to the left of the center for debugging
 			DrawText(CVector3(x - clusterRadius - 0.1, y, 0.05),
 			         std::to_string(loopFunctions.VisitedClusters[i].clusterId)+", "+std::to_string(loopFunctions.VisitedClusters[i].radius));
-		}
+		//}
 	}
 
 	// Then, draw individual visited locations that aren't in merged clusters.
@@ -229,11 +229,12 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 	// endpoints that may slightly overshoot the cluster's stored radius due to
 	// ceil() rounding in the chain-step calculation.
 	const Real exclusionBuffer = 0.5; // matches DBSCAN eps in Cluster_loop_functions
-	for(size_t i = 0; i < loopFunctions.VisitedLocations.size(); i++) {
-		x = loopFunctions.VisitedLocations[i].GetX();
-		y = loopFunctions.VisitedLocations[i].GetY();
+	for(size_t i = 0; i < loopFunctions.ExistingVisitedLocations.size(); i++) {
+		x = loopFunctions.ExistingVisitedLocations[i].GetX();
+		y = loopFunctions.ExistingVisitedLocations[i].GetY();
 		
 		// Check if this location is part of a merged cluster
+		/*
 		bool isInMergedCluster = false;
 		for(size_t j = 0; j < loopFunctions.VisitedClusters.size(); j++) {
 			if(loopFunctions.VisitedClusters[j].isMerged) {
@@ -245,16 +246,17 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 				}
 			}
 		}
-		
+		*/
 		// Only draw individual dots for locations not in merged clusters
-		if(!isInMergedCluster) {
+		
+		//if(!isInMergedCluster) {
 			CColor dotColor = CColor::YELLOW;
 			Real dotRadius = 0.05; // Small radius for the dots
 			Real dotArea = 0.16; // Contour of the area covered by the dot (for visualization purposes)
 			Real dotHeight = 0.01; // Very small height
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), dotRadius, dotHeight, dotColor);
 			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), dotArea, CColor::YELLOW, false); // Add a transparent circle to indicate coverage area
-		}
+		//}
 	}
 
 	// Draw real robot-visit points that contributed to a cluster in the last

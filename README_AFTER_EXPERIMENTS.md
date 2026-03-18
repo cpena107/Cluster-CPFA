@@ -14,6 +14,16 @@ python scripts/compare_algos.py
 
 * Copies `resource_collections_analysis\` to `resource_collection_all\resource_collection_analysis_{config}` where {config} is the experiment configuration.
 
+# Needs fixing
+
+Run
+```./sh/process_experiment_results.sh`` 
+```
+Then again
+```
+python scripts/compare_algos.py
+```
+
 
 # Run all analyses from `resource_collection_all/`
 
