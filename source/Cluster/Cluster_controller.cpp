@@ -1121,11 +1121,9 @@ void Cluster_controller::SetUnvisitedSearchLocation() {
 	SetIsHeadingToNest(false);
 	SetTarget(candidate);
 	
-	// If we exhausted all attempts, clear some visited locations to allow re-exploration
-	//if(!foundUnvisited && VisitedLocations.size() > MaxVisitedLocations / 2) {
-		// Remove the oldest half of visited locations
-	//	VisitedLocations.erase(VisitedLocations.begin(), 
-	//	                       VisitedLocations.begin() + VisitedLocations.size() / 2);
+	// If we exhausted all attempts, clear oldest location
+	//if(!foundUnvisited) {
+	//	VisitedLocations.erase(VisitedLocations.begin());
 	//}
 }
 

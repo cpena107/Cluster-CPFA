@@ -45,7 +45,9 @@ Cluster_loop_functions::Cluster_loop_functions() :
 	SitesCommunicatedCount(0),
 	MaxClusterRadius(1.0),
 	numSyntheticPoints(0),
-	nextClusterId(0)
+	nextClusterId(0),
+	percentCollected(0.1),
+	timeIntervalForRecording(0.0)
 {}
 
 void Cluster_loop_functions::Init(argos::TConfigurationNode &node) {	
@@ -62,6 +64,8 @@ void Cluster_loop_functions::Init(argos::TConfigurationNode &node) {
 	argos::GetNodeAttribute(Cluster_node, "RateOfLayingPheromone",             RateOfLayingPheromone);
 	argos::GetNodeAttribute(Cluster_node, "RateOfPheromoneDecay",              RateOfPheromoneDecay);
 	argos::GetNodeAttribute(Cluster_node, "PrintFinalScore",                   PrintFinalScore);
+	argos::GetNodeAttributeOrDefault(Cluster_node, "percentCollected",                  percentCollected, 0.1);
+	argos::GetNodeAttributeOrDefault(Cluster_node, "TimeIntervalForRecording",         timeIntervalForRecording, 0.0);
 
 	UninformedSearchVariation = ToRadians(USV_InDegrees);
 	argos::TConfigurationNode settings_node = argos::GetNode(node, "settings");
@@ -134,6 +138,8 @@ void Cluster_loop_functions::Reset() {
   	LastProcessedLocationIndex = 0;
 	SitesCommunicatedSum = 0;
 	SitesCommunicatedCount = 0;
+	percentCollected = 0.1;
+	timeIntervalForRecording = 0.0;
 
 	FoodList.clear();
 	FoodColoringList.clear();
@@ -198,6 +204,15 @@ void Cluster_loop_functions::PostStep() {
 		if (VisitedClusters.size() > MaxClusterCount) {
 			MaxClusterCount = VisitedClusters.size();
 		}
+	}
+	// Record the current time when 10%, 20%, ..., 100% of the food has been collected
+	size_t foodCollected = FoodItemCount - FoodList.size();
+	if(foodCollected >= percentCollected * FoodItemCount) {
+		double timeInSeconds = getSimTimeInSeconds();
+		timeIntervalForRecording = timeInSeconds - timeIntervalForRecording; // Time since last recording
+		// random_seed,milestone_percent,time_interval,cumulative_time,food_distribution,algorithm_mode,num_robots,total_food
+		printf("%lu, %f, %f, %f, %d, %d, %lu, %lu\n", RandomSeed, percentCollected*100, timeIntervalForRecording, timeInSeconds, FoodDistribution, 0, Num_robots, foodCollected);
+		percentCollected += 0.1;
 	}
 }
 
@@ -1052,7 +1067,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
  * Returns a target location in the arena that has minimal cluster coverage
  *****/
 argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
-	const size_t maxSamples = 10;
+	const size_t maxSamples = 1000;
 
 	for(size_t sample = 0; sample < maxSamples; ++sample) {
 		argos::CVector2 candidate(RNG->Uniform(ForageRangeX), RNG->Uniform(ForageRangeY));

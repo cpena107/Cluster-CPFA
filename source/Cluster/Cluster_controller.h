@@ -124,6 +124,8 @@ class Cluster_controller : public BaseController {
     argos::Real spiralGrowthRate;
 	size_t MaxSpiralCollisions;
 	size_t spiralCollisionStartCount;
+
+	
 	
 };
 

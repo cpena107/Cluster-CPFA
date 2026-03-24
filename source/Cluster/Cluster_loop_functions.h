@@ -167,6 +167,8 @@ class Cluster_loop_functions : public argos::CLoopFunctions
         vector<size_t>			ForageList;
 		argos::CVector2 NestPosition;
 		argos::Real MaxClusterRadius;
+		argos::Real percentCollected;
+		argos::Real timeIntervalForRecording;
 
 	private:
 
@@ -182,6 +184,8 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		argos::Real CalculateClusterCoverage(const VisitedCluster& cluster);
 		double score;
 		int PrintFinalScore;
+
+
 };
 
 #endif /* Cluster_LOOP_FUNCTIONS_H */
