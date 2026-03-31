@@ -85,8 +85,8 @@ def generate_xml_content(dist_name, count, visited_tolerance, rec_freq, max_visi
 
     <!-- evolvable parameters -->
         <Cluster       ProbabilityOfSwitchingToSearching = "0.504"
-                    ProbabilityOfReturningToNest      = "0.01"
-                    ProbabilityOfSearchingLowClusters = "0.3"
+                    ProbabilityOfReturningToNest      = "0.002"
+                    ProbabilityOfSearchingLowClusters = "0.001"
                     UninformedSearchVariation         = "7.0"
                     RateOfInformedSearchDecay         = "0.28"
                     RateOfSiteFidelity                = "4.27"

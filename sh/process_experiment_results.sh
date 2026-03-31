@@ -38,17 +38,34 @@ process_files() {
             
             output_dir="${output_base_dir}/${dist_folder}/${res_count}_resources/new"
             output_file="${output_dir}/resource_collection_analysis_details.csv"
+            summary_file="${output_dir}/resource_collection_analysis_summary.csv"
             
             # Create output directory if it doesn't exist
             mkdir -p "$output_dir"
             
             echo "Converting $filename..."
             echo "  -> Target: $dist_folder ($res_count resources)"
-            
-            python3 scripts/convert_results_format.py \
-                --input_file "$filepath" \
-                --output_file "$output_file" \
-                --food_distribution "$dist_code"
+
+            header=$(head -n 1 "$filepath" | tr -d '\r')
+
+            if echo "$header" | grep -qE '^random_seed,milestone_percent,time_interval,cumulative_time,food_distribution,algorithm_mode,num_robots,total_food$'; then
+                cp "$filepath" "$output_file"
+                echo "  -> Input already in details format; copied directly."
+            else
+                python3 scripts/convert_results_format.py \
+                    --input_file "$filepath" \
+                    --output_file "$output_file" \
+                    --food_distribution "$dist_code"
+
+                if [ $? -ne 0 ]; then
+                    echo "  -> Conversion failed for $filename; skipping summary."
+                    continue
+                fi
+            fi
+
+            python3 scripts/generate_summary_from_details.py \
+                --input_file "$output_file" \
+                --output_file "$summary_file"
             
             count=$((count + 1))
         else

@@ -41,6 +41,21 @@ for analysis_dir in $(ls -d resource_collection_all/resource_collection_analysis
                     else
                         echo "     [FAILURE] Script returned non-zero exit code"
                     fi
+
+                    percent_script_path="$target_dir/plot_48_resources_summary.py"
+
+                    if [ -f "$percent_script_path" ]; then
+                        echo "  -> Running summary plot in: $target_dir"
+                        if python3 plot_48_resources_summary.py; then
+                            mkdir -p "$BASE_DIR/analysis_plots_${analysis_dir#resource_collection_analysis_}"
+                            mv *distribution_48.* "$BASE_DIR/analysis_plots_${analysis_dir#resource_collection_analysis_}/"
+                            echo "     [SUCCESS] moved generated summary plots to $BASE_DIR/analysis_plots_${analysis_dir#resource_collection_analysis_}/"
+                        else
+                            echo "     [FAILURE] Summary script returned non-zero exit code"
+                        fi
+                    else
+                        echo "  -> [SKIP] plot_48_resources_summary.py not found in $target_dir"
+                    fi
                     
                     # Return to base directory
                     cd "$BASE_DIR" || exit 1

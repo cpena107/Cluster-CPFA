@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 # Configuration
 NUM_WORKERS = 3  # Based on 48 cores / 15 tasks per experiment
-CSV_FILE = "best_experiment_configurations.csv"
+CSV_FILE = "experiment_configurations.csv"
 
 def get_experiments_from_csv():
     if not os.path.exists(CSV_FILE):

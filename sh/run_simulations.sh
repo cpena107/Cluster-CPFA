@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to run multiple ARGoS simulations and collect results
+# Script to run multiple ARGoS simulations and collect milestone results
 # Usage: ./run_simulations.sh <xml_config_file> <output_file> [num_runs]
 
 # Check if required arguments are provided
@@ -20,8 +20,8 @@ if [ ! -f "$XML_FILE" ]; then
     exit 1
 fi
 
-# Create output file with header
-echo "Run,FinalTime,ResourcesCollected" > "$OUTPUT_FILE"
+# Create output file with requested header
+echo "random_seed,milestone_percent,time_interval,cumulative_time,food_distribution,algorithm_mode,num_robots,total_food" > "$OUTPUT_FILE"
 echo "Starting $NUM_RUNS simulations using $XML_FILE"
 echo "Results will be saved to $OUTPUT_FILE"
 echo "----------------------------------------"
@@ -32,32 +32,49 @@ for i in $(seq 1 $NUM_RUNS); do
     
     # Run ARGoS and capture output
     OUTPUT=$(argos3 -c "$XML_FILE" 2>&1)
-    
-    # Get the last line of output that starts with a number (contains time, resources)
-    LAST_LINE=$(echo "$OUTPUT" | grep -E "^[0-9]" | tail -1)
-    
-    # Extract time and resources from the last line (format: "time, resources")
-    FINAL_TIME=$(echo "$LAST_LINE" | awk -F',' '{print $1}' | tr -d ' ')
-    RESOURCES=$(echo "$LAST_LINE" | awk -F',' '{print $2}' | tr -d ' ')
-    
-    # Save to output file
-    echo "$i,$FINAL_TIME,$RESOURCES" >> "$OUTPUT_FILE"
-    echo "  Run $i: Time=$FINAL_TIME, Resources=$RESOURCES"
+    STATUS=$?
+
+    if [ "$STATUS" -ne 0 ]; then
+        echo "  Run $i failed (exit=$STATUS). Skipping."
+        echo "$OUTPUT" | tail -5
+        continue
+    fi
+
+    # Extract lines in format:
+    # random_seed,milestone_percent,time_interval,cumulative_time,food_distribution,algorithm_mode,num_robots,total_food
+    RUN_ROWS=$(echo "$OUTPUT" | awk -F',' '
+        NF == 8 {
+            for(i=1;i<=8;i++) {
+                gsub(/^[ \t]+|[ \t]+$/, "", $i)
+            }
+            if($1 ~ /^[0-9]+$/ &&
+               $2 ~ /^-?[0-9]+(\.[0-9]+)?$/ &&
+               $3 ~ /^-?[0-9]+(\.[0-9]+)?$/ &&
+               $4 ~ /^-?[0-9]+(\.[0-9]+)?$/ &&
+               $5 ~ /^-?[0-9]+$/ &&
+               $6 ~ /^-?[0-9]+$/ &&
+               $7 ~ /^-?[0-9]+$/ &&
+               $8 ~ /^-?[0-9]+$/) {
+                print $1 "," $2 "," $3 "," $4 "," $5 "," $6 "," $7 "," $8
+            }
+        }
+    ')
+
+    if [ -z "$RUN_ROWS" ]; then
+        echo "  Run $i: no milestone rows found in output."
+        continue
+    fi
+
+    # Append all milestone rows from this run
+    echo "$RUN_ROWS" >> "$OUTPUT_FILE"
+    echo "  Run $i: recorded $(echo "$RUN_ROWS" | wc -l) milestone rows"
 done
 
 echo "----------------------------------------"
 echo "All simulations complete!"
 echo "Results saved to $OUTPUT_FILE"
 
-# Display summary statistics
 echo ""
-echo "Summary Statistics:"
+echo "Preview:"
 echo "----------------------------------------"
-awk -F',' 'NR>1 {sum_time+=$2; sum_res+=$3; count++} 
-    END {
-        if(count>0) {
-            print "Average Time: " sum_time/count
-            print "Average Resources: " sum_res/count
-            print "Total Runs: " count
-        }
-    }' "$OUTPUT_FILE"
+head -n 12 "$OUTPUT_FILE"

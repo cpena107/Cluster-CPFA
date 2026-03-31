@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # Script to run all CPFA_ClusterMap experiments with proper output file naming
-# Output files follow the pattern: Cluster_CPFA_{m}sites_{n}res_{distribution}.csv
-# where n is the last number extracted from the experiment filename
+# Output files follow the pattern: Cluster_CPFA_{n}res_{distribution}.csv
+# Each CSV row is a milestone record from ARGoS output:
+# random_seed,milestone_percent,time_interval,cumulative_time,food_distribution,algorithm_mode,num_robots,total_food
 
 NUM_RUNS=${1:-30}  # Default to 30 runs if not specified
 OUTPUT_DIR=${2:-"."}  # Default to current directory if not specified
@@ -80,6 +81,12 @@ run_experiment() {
     local XML_FILE="$1"
     local NUM_RUNS="$2"
     local OUTPUT_DIR="$3"
+    local NUM
+    local TYPE
+    local OUTPUT_FILE
+    local OUTPUT
+    local STATUS
+    local RUN_ROWS
     
     # Check if file exists
     if [ ! -f "$XML_FILE" ]; then
@@ -99,8 +106,8 @@ run_experiment() {
     echo "Output file: $OUTPUT_FILE"
     echo "----------------------------------------"
     
-    # Create output file with header
-    echo "Run,FinalTime,ResourcesCollected" > "$OUTPUT_FILE"
+    # Create output file with milestone header
+    echo "random_seed,milestone_percent,time_interval,cumulative_time,food_distribution,algorithm_mode,num_robots,total_food" > "$OUTPUT_FILE"
     
     # Run simulations
     for i in $(seq 1 $NUM_RUNS); do
@@ -108,28 +115,58 @@ run_experiment() {
         
         # Run ARGoS and capture output
         OUTPUT=$(argos3 -c "$XML_FILE" 2>&1)
-        
-        # Get the last line of output that starts with a number (contains time, resources)
-        LAST_LINE=$(echo "$OUTPUT" | grep -E "^[0-9]" | tail -1)
-        
-        # Extract time and resources from the last line (format: "time, resources")
-        FINAL_TIME=$(echo "$LAST_LINE" | awk -F',' '{print $1}' | tr -d ' ')
-        RESOURCES=$(echo "$LAST_LINE" | awk -F',' '{print $2}' | tr -d ' ')
-        
-        # Save to output file
-        echo "$i,$FINAL_TIME,$RESOURCES" >> "$OUTPUT_FILE"
-        echo "    Run $i: Time=$FINAL_TIME, Resources=$RESOURCES"
+        STATUS=$?
+
+        if [ "$STATUS" -ne 0 ]; then
+            echo "    Run $i failed (exit=$STATUS), skipping."
+            echo "$OUTPUT" | tail -5
+            continue
+        fi
+
+        # Extract lines with exactly 8 CSV fields:
+        # random_seed,milestone_percent,time_interval,cumulative_time,food_distribution,algorithm_mode,num_robots,total_food
+        RUN_ROWS=$(echo "$OUTPUT" | awk -F',' '
+            NF == 8 {
+                for(j=1;j<=8;j++) {
+                    gsub(/^[ \t]+|[ \t]+$/, "", $j)
+                }
+                if($1 ~ /^[0-9]+$/ &&
+                   $2 ~ /^-?[0-9]+(\.[0-9]+)?$/ &&
+                   $3 ~ /^-?[0-9]+(\.[0-9]+)?$/ &&
+                   $4 ~ /^-?[0-9]+(\.[0-9]+)?$/ &&
+                   $5 ~ /^-?[0-9]+$/ &&
+                   $6 ~ /^-?[0-9]+$/ &&
+                   $7 ~ /^-?[0-9]+$/ &&
+                   $8 ~ /^-?[0-9]+$/) {
+                    print $1 "," $2 "," $3 "," $4 "," $5 "," $6 "," $7 "," $8
+                }
+            }
+        ')
+
+        if [ -z "$RUN_ROWS" ]; then
+            echo "    Run $i: no milestone rows found."
+            continue
+        fi
+
+        echo "$RUN_ROWS" >> "$OUTPUT_FILE"
+        echo "    Run $i: recorded $(echo "$RUN_ROWS" | wc -l) milestone rows"
     done
     
     # Display summary statistics for this experiment
     echo ""
     echo "  Summary for $OUTPUT_FILE:"
-    awk -F',' 'NR>1 {sum_time+=$2; sum_res+=$3; count++} 
+    awk -F',' 'NR>1 {
+            count++
+            seeds[$1]=1
+            if($2+0 == 100) completed++
+        }
         END {
             if(count>0) {
-                print "    Average Time: " sum_time/count
-                print "    Average Resources: " sum_res/count
-                print "    Total Runs: " count
+                seed_count=0
+                for(k in seeds) seed_count++
+                print "    Total milestone rows: " count
+                print "    Unique seeds recorded: " seed_count
+                print "    100% milestones recorded: " completed
             }
         }' "$OUTPUT_FILE"
     echo ""

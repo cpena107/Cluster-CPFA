@@ -67,9 +67,10 @@ def calculate_means(root_dir):
                 if 'milestone_percent' in df.columns and 'cumulative_time' in df.columns:
                     completed = df[df['milestone_percent'] == 100]
                     if not completed.empty:
-                        row[label] = completed['cumulative_time'].mean()
+                        row[label] = f"{completed['cumulative_time'].mean():.3f}"
                 elif 'FinalTime' in df.columns:
-                    row[label] = df['FinalTime'].mean()
+                    # display 3 decimal places for FinalTime
+                    row[label] = f"{df['FinalTime'].mean():.3f}"
             except Exception:
                 # Skip unreadable/malformed files
                 pass
@@ -102,6 +103,6 @@ if __name__ == "__main__":
         else:
             print(f"Folder {new_folder_name} already exists.")
             
-        calculate_means(os.path.join(new_folder_name, "cluster_distribution"))
         calculate_means(os.path.join(new_folder_name, "random_distribution"))
         calculate_means(os.path.join(new_folder_name, "powerlaw_distribution"))
+        calculate_means(os.path.join(new_folder_name, "cluster_distribution"))

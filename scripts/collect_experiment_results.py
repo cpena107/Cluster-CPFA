@@ -55,14 +55,7 @@ def collect_results():
                         # However, combined_summary_statistics.csv had 'FinalTime' metrics.
                         # We will compute stats for 'FinalTime'.
                         
-                        target_column = 'FinalTime'
-                        if target_column not in df.columns:
-                            # Fallback or error?
-                            # Check if 'ResourcesCollected' is the only one.
-                            if 'ResourcesCollected' in df.columns:
-                                # Start with Time, but maybe user wants Resources?
-                                # Given previous file structure, we stick to FinalTime
-                                pass
+                        target_column = 'cumulative_time'
                         
                         if target_column in df.columns:
                             values = df[target_column]
@@ -71,7 +64,7 @@ def collect_results():
                             
                             # Row dictionary
                             row = {
-                                'ID': id,
+                                'random_seed': id,
                                 'ResourceCount': resource_count,
                                 'Distribution': distribution,
                                 'VisitedTolerance': visited_tolerance,
@@ -100,7 +93,7 @@ def collect_results():
         
         # Reorder columns to match request logic
         cols = [
-            'ID', 'ResourceCount', 'Distribution', 
+            'random_seed', 'ResourceCount', 'Distribution', 
             'VisitedTolerance', 'RecordingFreq', 'MaxVisited', 'MaxRadius', 'ArenaSize',
             'NumTests', 'Mean', 'Std', 'Lowest', '25%', '50%', '75%', 'Max'
         ]
@@ -108,6 +101,8 @@ def collect_results():
         cols = [c for c in cols if c in summary_df.columns]
         
         summary_df = summary_df[cols]
+        # Only keep rows with 100 milestone_percent
+        summary_df = summary_df[summary_df['milestone_percent'] == 100]
         
         summary_df.to_csv(output_file, index=False)
         print(f"Successfully created {output_file} with {len(summary_df)} rows.")
