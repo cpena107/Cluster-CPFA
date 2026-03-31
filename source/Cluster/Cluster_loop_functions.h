@@ -64,6 +64,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 	double getRateOfInformedSearchDecay();
 	double getRateOfSiteFidelity();
 	double getRateOfLayingPheromone();
+	double getRateOfLowClusterSearch();
 	double getRateOfPheromoneDecay();
 	argos::CVector2 GetLowClusterSearchLocation();	protected:
 
@@ -106,6 +107,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 	argos::Real RateOfInformedSearchDecay;
 	argos::Real RateOfSiteFidelity;
 	argos::Real RateOfLayingPheromone;
+	argos::Real RateOfLowClusterSearch;
 	argos::Real RateOfPheromoneDecay;		/* physical robot & world variables */
 		argos::Real FoodRadius;
 		argos::Real FoodRadiusSquared;

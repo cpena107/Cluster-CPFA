@@ -30,6 +30,7 @@ Cluster_loop_functions::Cluster_loop_functions() :
 	RateOfInformedSearchDecay(0.0),
 	RateOfSiteFidelity(0.0),
 	RateOfLayingPheromone(0.0),
+	RateOfLowClusterSearch(0.0),
 	RateOfPheromoneDecay(0.0),
 	FoodRadius(0.05),
 	FoodRadiusSquared(0.0025),
@@ -62,6 +63,7 @@ void Cluster_loop_functions::Init(argos::TConfigurationNode &node) {
 	argos::GetNodeAttribute(Cluster_node, "RateOfInformedSearchDecay",         RateOfInformedSearchDecay);
 	argos::GetNodeAttribute(Cluster_node, "RateOfSiteFidelity",                RateOfSiteFidelity);
 	argos::GetNodeAttribute(Cluster_node, "RateOfLayingPheromone",             RateOfLayingPheromone);
+	argos::GetNodeAttributeOrDefault(Cluster_node, "RateOfLowClusterSearch",   RateOfLowClusterSearch, ProbabilityOfSearchingLowClusters);
 	argos::GetNodeAttribute(Cluster_node, "RateOfPheromoneDecay",              RateOfPheromoneDecay);
 	argos::GetNodeAttribute(Cluster_node, "PrintFinalScore",                   PrintFinalScore);
 	argos::GetNodeAttributeOrDefault(Cluster_node, "percentCollected",                  percentCollected, 0.1);
@@ -208,10 +210,11 @@ void Cluster_loop_functions::PostStep() {
 	// Record the current time when 10%, 20%, ..., 100% of the food has been collected
 	size_t foodCollected = FoodItemCount - FoodList.size();
 	if(foodCollected >= percentCollected * FoodItemCount) {
-		double timeInSeconds = getSimTimeInSeconds();
-		timeIntervalForRecording = timeInSeconds - timeIntervalForRecording; // Time since last recording
+		double currentTime = getSimTimeInSeconds();
+		double timeInSeconds = currentTime - timeIntervalForRecording; // Time since last recording
 		// random_seed,milestone_percent,time_interval,cumulative_time,food_distribution,algorithm_mode,num_robots,total_food
-		printf("%lu, %f, %f, %f, %d, %d, %lu, %lu\n", RandomSeed, percentCollected*100, timeIntervalForRecording, timeInSeconds, FoodDistribution, 0, Num_robots, foodCollected);
+		printf("%lu, %f, %f, %f, %d, %d, %lu, %lu\n", RandomSeed, percentCollected*100, timeInSeconds, currentTime, FoodDistribution, 0, Num_robots, foodCollected);
+		timeIntervalForRecording = currentTime;
 		percentCollected += 0.1;
 	}
 }
@@ -529,6 +532,10 @@ double Cluster_loop_functions::getRateOfSiteFidelity() {
 
 double Cluster_loop_functions::getRateOfLayingPheromone() {
 	return RateOfLayingPheromone;
+}
+
+double Cluster_loop_functions::getRateOfLowClusterSearch() {
+	return RateOfLowClusterSearch;
 }
 
 double Cluster_loop_functions::getRateOfPheromoneDecay() {
@@ -1111,7 +1118,7 @@ double Cluster_loop_functions::getProbabilityOfSearchingLowClusters() {
 	const argos::Real forageHeight = ForageRangeY.GetMax() - ForageRangeY.GetMin();
 	const argos::Real arenaArea = std::max<argos::Real>(1e-6, forageWidth * forageHeight);
 
-	size_t globalVisits = VisitedLocations.size() + ExistingVisitedLocations.size();
+	size_t globalVisits = 0; //VisitedLocations.size() + ExistingVisitedLocations.size();
 	for(const auto& cluster : VisitedClusters) {
 		globalVisits += std::max<size_t>(cluster.visitCount, 1);
 	}

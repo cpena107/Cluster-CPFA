@@ -620,8 +620,10 @@ void Cluster_controller::Returning() {
 		// located at the last place it picked up food.
 		argos::Real poissonCDF_pLayRate    = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLayingPheromone);
 		argos::Real poissonCDF_sFollowRate = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfSiteFidelity);
+		argos::Real poissonCDF_sFollowRateLowCluster = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLowClusterSearch);
 		argos::Real r1 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 		argos::Real r2 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
+		argos::Real r3 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 
 		if (isHoldingFood) { 
 	          num_targets_collected++;
@@ -652,41 +654,38 @@ void Cluster_controller::Returning() {
 
 		// Determine probabilistically whether to use site fidelity, pheromone
 		// trails, or random search.
-		//ofstream log_output_stream;
-		//log_output_stream.open("Cluster_log.txt", ios::app);
-		//log_output_stream << "At the nest." << endl;	    
+		ofstream log_output_stream;
+		log_output_stream.open("Cluster_log.txt", ios::app);
+		log_output_stream << "At the nest." << endl;	    
 		 
 		// use site fidelity
 		if((updateFidelity == true) && (poissonCDF_sFollowRate > r2)) {
-			//log_output_stream << "Using site fidelity" << endl;
+			log_output_stream << "Using site fidelity" << endl;
 	
 			SetIsHeadingToNest(false);
 			SetTarget(SiteFidelityPosition);
 			isInformed = true;
 		}
 		// probabilistically use low-cluster search (underexplored areas)
-		else {
-			argos::Real r3 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
-			if(r3 < LoopFunctions->getProbabilityOfSearchingLowClusters()) {
-				//log_output_stream << "Using low-cluster search" << endl;
+		else if(r3 < poissonCDF_sFollowRateLowCluster) {
+				log_output_stream << "Using low-cluster search" << endl;
 				SetLowClusterSearchLocation();
 				isInformed = true;
 				isUsingSiteFidelity = false;
 				isLostResource = false; // Reset lost resource flag when intentionally searching underexplored areas
-			}
-			// use pheromone waypoints (third priority)
-			else if(SetTargetPheromone() == true) {
-				//log_output_stream << "Using site pheremone" << endl;
-				isInformed = true;
-				isUsingSiteFidelity = false;
-			}
-			// use random search (last priority)
-			else {
-				//log_output_stream << "Using random search" << endl;	    
-				SetRandomSearchLocation();
-				isInformed = false;
-				isUsingSiteFidelity = false;
-			}
+		}
+		// use pheromone waypoints (third priority)
+		else if(SetTargetPheromone() == true) {
+			log_output_stream << "Using site pheremone" << endl;
+			isInformed = true;
+			isUsingSiteFidelity = false;
+		}
+		// use random search (last priority)
+		else {
+			log_output_stream << "Using random search" << endl;	    
+			SetRandomSearchLocation();
+			isInformed = false;
+			isUsingSiteFidelity = false;	
 		}
 
 		isGivingUpSearch = false;
@@ -694,15 +693,15 @@ void Cluster_controller::Returning() {
 		isHoldingFood = false;
 		
 		// If successfully returned with food, clear visited locations for fresh exploration
-		/*if(!isLostResource) {
-			ClearVisitedLocations();
+		if(!isLostResource) {
+			VisitedLocations.clear();
 			isSpiralSearching = false; // Reset spiral state
-		}*/
+		}
 		
 		// Always clear the local trail when leaving the nest to start a new trip
 		myTrail.clear();
 
-		//log_output_stream.close();
+		log_output_stream.close();
 	}
 	// Take a small step towards the nest so we don't overshoot by too much is we miss it
 	else {
