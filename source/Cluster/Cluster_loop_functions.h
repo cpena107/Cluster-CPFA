@@ -53,6 +53,8 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 	void UpdatePheromoneList();
 	void SetFoodDistribution();
 	void UpdateVisitedClusters();
+	void RegisterLowClusterMission(const std::string& robotId, const argos::CVector2& targetLocation, size_t dispatchTick);
+	void ResolveLowClusterMission(const std::string& robotId, int missionOutcome);
 
 	argos::Real getSimTimeInSeconds();		std::vector<argos::CColor>   TargetRayColorList;
 
@@ -66,6 +68,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 	double getRateOfLayingPheromone();
 	double getRateOfLowClusterSearch();
 	double getRateOfPheromoneDecay();
+	argos::Real getLowClusterPriorityWeight();
 	argos::CVector2 GetLowClusterSearchLocation();	protected:
 
 		/* Record how many sites a robot communicated to the nest */
@@ -160,6 +163,15 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		std::unordered_map<int, VisitedCluster> ClusterMap; // persistent map keyed by cluster ID
 		int nextClusterId;
 
+		struct LowClusterMission {
+			argos::CVector2 targetLocation;
+			size_t dispatchTick;
+			size_t timeoutTick;
+		};
+		std::unordered_map<std::string, LowClusterMission> LowClusterMissions;
+		argos::Real LowClusterReturnTimeoutSeconds;
+		argos::Real LowClusterPriorityWarmupSeconds;
+
 		argos::CRange<argos::Real>   ForageRangeX;
 		argos::CRange<argos::Real>   ForageRangeY;
 
@@ -171,6 +183,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		argos::Real MaxClusterRadius;
 		argos::Real percentCollected;
 		argos::Real timeIntervalForRecording;
+		argos::Real VisitedLocationTolerance;
 
 	private:
 
@@ -184,6 +197,8 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		void MergeClustersIntoSuperClusters();
 		void MergeTriangularSuperClusters();
 		argos::Real CalculateClusterCoverage(const VisitedCluster& cluster);
+		void ProcessLowClusterMissionTimeouts();
+		void AddMaxRadiusClusterAt(const argos::CVector2& targetLocation);
 		double score;
 		int PrintFinalScore;
 

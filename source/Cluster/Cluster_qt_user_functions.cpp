@@ -218,9 +218,9 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), 0.05, clusterHeight, clusterColor);
 			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), clusterRadius, clusterColor, false);
 
-			// Draw cluster ID to the left of the center for debugging
+			// Draw cluster ID to the left of the center for debugging, display only 2 decimal places for radius
 			DrawText(CVector3(x - clusterRadius - 0.1, y, 0.05),
-			         std::to_string(loopFunctions.VisitedClusters[i].clusterId)+", "+std::to_string(loopFunctions.VisitedClusters[i].radius));
+			         std::to_string(loopFunctions.VisitedClusters[i].clusterId)+", "+std::to_string((int)(clusterRadius*100)/100.0)+", " + std::to_string(loopFunctions.VisitedClusters[i].visitCount)); // ID and radius with 2 decimal places;
 		//}
 	}
 
@@ -261,11 +261,13 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 
 	// Draw real robot-visit points that contributed to a cluster in the last
 	// DBSCAN run as small green cylinders for debugging.
+	/*
 	for(size_t i = 0; i < loopFunctions.ClusteredVisitedLocations.size(); i++) {
 		x = loopFunctions.ClusteredVisitedLocations[i].GetX();
 		y = loopFunctions.ClusteredVisitedLocations[i].GetY();
 		DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), 0.04, 0.03, CColor::GREEN);
 	}
+	*/
 }
 
 /*

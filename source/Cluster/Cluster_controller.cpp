@@ -27,7 +27,9 @@ Cluster_controller::Cluster_controller() :
     spiralStepAngle(0.3), // Approx 17 degrees
     spiralGrowthRate(0.01), // Small outward growth
 	MaxSpiralCollisions(5),
-	spiralCollisionStartCount(0)
+	spiralCollisionStartCount(0),
+	isLowClusterMission(false),
+	lowClusterMissionState(-1)
 {
 	// Start in SEARCHING state instead of DEPARTING
 	Cluster_state = SEARCHING;
@@ -178,6 +180,8 @@ void Cluster_controller::Reset() {
 	
 	isSpiralSearching = false;
 	spiralPathIndex = 0;
+	isLowClusterMission = false;
+	lowClusterMissionState = -1;
 }
 
 bool Cluster_controller::IsHoldingFood() {
@@ -371,16 +375,16 @@ void Cluster_controller::Departing() {
 			//log_output_stream.close();
 		}
 
-		// Rule 3: low-cluster informed arrival starts spiral only if no nearby food.
+		// Rule 3: low-cluster informed arrival starts spiral 
 		if(wasLowClusterTarget && !IsHoldingFood()) {
-			SetHoldingFood();
-			if(!IsHoldingFood() && !HasNearbyFood(GetPosition(), FoodDistanceTolerance)) {
+			//SetHoldingFood();
+			//if(!IsHoldingFood() && !HasNearbyFood(GetPosition(), FoodDistanceTolerance)) {
 				isSpiralSearching = true;
 				spiralCenter = GetPosition();
 				spiralPathIndex = 0;
 				spiralCollisionStartCount = collision_counter;
 				SetSpiralSearchLocation();
-			}
+			//}
 		}
 	}
 }
@@ -411,9 +415,9 @@ void Cluster_controller::DetectLostResource() {
 
 void Cluster_controller::Searching() {
 	// "scan" for food only every half of a second
-	if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
+	//if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
 		SetHoldingFood();
-	}
+	//}
 	
 	// If we just picked up food, return immediately to nest
 	// Don't continue with searching logic
@@ -621,11 +625,16 @@ void Cluster_controller::Returning() {
 		argos::Real poissonCDF_pLayRate    = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLayingPheromone);
 		argos::Real poissonCDF_sFollowRate = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfSiteFidelity);
 		argos::Real poissonCDF_sFollowRateLowCluster = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLowClusterSearch);
+		argos::Real lowClusterPriorityWeight = LoopFunctions->getLowClusterPriorityWeight();
+		argos::Real adjustedLowClusterFollowRate = poissonCDF_sFollowRateLowCluster * lowClusterPriorityWeight;
 		argos::Real r1 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 		argos::Real r2 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 		argos::Real r3 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 
 		if (isHoldingFood) { 
+			if(isLowClusterMission && lowClusterMissionState == -1) {
+				ResolveLowClusterMission(1);
+			}
 	          num_targets_collected++;
 	          LoopFunctions->currNumCollectedFood++;
 	          LoopFunctions->setScore(num_targets_collected);
@@ -666,19 +675,19 @@ void Cluster_controller::Returning() {
 			SetTarget(SiteFidelityPosition);
 			isInformed = true;
 		}
-		// probabilistically use low-cluster search (underexplored areas)
-		else if(r3 < poissonCDF_sFollowRateLowCluster) {
+		// use pheromone waypoints (second priority)
+		else if(SetTargetPheromone() == true) {
+			log_output_stream << "Using site pheremone" << endl;
+			isInformed = true;
+			isUsingSiteFidelity = false;
+		}
+		// probabilistically use low-cluster search (third priority, warmed up over time)
+		else if(r3 < adjustedLowClusterFollowRate) {
 				log_output_stream << "Using low-cluster search" << endl;
 				SetLowClusterSearchLocation();
 				isInformed = true;
 				isUsingSiteFidelity = false;
 				isLostResource = false; // Reset lost resource flag when intentionally searching underexplored areas
-		}
-		// use pheromone waypoints (third priority)
-		else if(SetTargetPheromone() == true) {
-			log_output_stream << "Using site pheremone" << endl;
-			isInformed = true;
-			isUsingSiteFidelity = false;
 		}
 		// use random search (last priority)
 		else {
@@ -691,6 +700,10 @@ void Cluster_controller::Returning() {
 		isGivingUpSearch = false;
 		Cluster_state = DEPARTING;   
 		isHoldingFood = false;
+
+		if(isLowClusterMission && lowClusterMissionState == -1) {
+			ResolveLowClusterMission(-1);
+		}
 		
 		// If successfully returned with food, clear visited locations for fresh exploration
 		if(!isLostResource) {
@@ -747,6 +760,9 @@ void Cluster_controller::SetLowClusterSearchLocation() {
 	argos::CVector2 target = LoopFunctions->GetLowClusterSearchLocation();
 	LoopFunctions->SearchLocationRays.push_back(argos::CRay3(argos::CVector3(LoopFunctions->NestPosition.GetX(), LoopFunctions->NestPosition.GetY(), 0.01), argos::CVector3(target.GetX(), target.GetY(), 0.01)));
 	LoopFunctions->LowClusterTargetList[controllerID] = target;
+	LoopFunctions->RegisterLowClusterMission(controllerID, target, SimulationTick());
+	isLowClusterMission = true;
+	lowClusterMissionState = -1;
 	SetIsHeadingToNest(false); // Turn off error for this
 	SetTarget(target);
 }
@@ -806,6 +822,16 @@ void Cluster_controller::SetHoldingFood() {
 	if(IsHoldingFood() == true && SimulationTick() % LoopFunctions->DrawDensityRate == 0) {
 			TrailToShare.push_back(GetPosition());
 	}
+}
+
+void Cluster_controller::ResolveLowClusterMission(int missionOutcome) {
+	if(!isLowClusterMission || LoopFunctions == NULL) {
+		return;
+	}
+
+	lowClusterMissionState = missionOutcome;
+	LoopFunctions->ResolveLowClusterMission(controllerID, missionOutcome);
+	isLowClusterMission = false;
 }
 
 /*****
@@ -1166,6 +1192,9 @@ void Cluster_controller::SetSpiralSearchLocation() {
     
     // Reset if we exceed the super cluster radius
     if((collision_counter - spiralCollisionStartCount) > MaxSpiralCollisions || currentRadius > maxRadius) {
+		if(isLowClusterMission && lowClusterMissionState == -1 && !IsHoldingFood()) {
+			ResolveLowClusterMission(0);
+		}
         isSpiralSearching = false;
         spiralPathIndex = 0;
         // Fall back to random search or other behavior

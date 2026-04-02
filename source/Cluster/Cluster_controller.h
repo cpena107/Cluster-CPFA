@@ -27,7 +27,7 @@ class Cluster_controller : public BaseController {
 		bool IsUsingSiteFidelity();
 		bool IsInTheNest();
 
-		Real FoodDistanceTolerance;
+		argos::Real FoodDistanceTolerance;
 
 		void SetLoopFunctions(Cluster_loop_functions* lf);
 
@@ -93,6 +93,7 @@ class Cluster_controller : public BaseController {
 	void ClearVisitedLocations();
 	void DetectLostResource();
 	bool IsWithinForageRange(argos::CVector2 location);
+	void ResolveLowClusterMission(int missionOutcome);
 
 	CVector2 previous_position;
 
@@ -124,6 +125,8 @@ class Cluster_controller : public BaseController {
     argos::Real spiralGrowthRate;
 	size_t MaxSpiralCollisions;
 	size_t spiralCollisionStartCount;
+	bool isLowClusterMission;
+	int lowClusterMissionState;
 
 	
 	

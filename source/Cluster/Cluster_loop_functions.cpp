@@ -45,10 +45,13 @@ Cluster_loop_functions::Cluster_loop_functions() :
 	SitesCommunicatedSum(0),
 	SitesCommunicatedCount(0),
 	MaxClusterRadius(1.0),
+	LowClusterReturnTimeoutSeconds(60.0),
+	LowClusterPriorityWarmupSeconds(120.0),
 	numSyntheticPoints(0),
 	nextClusterId(0),
 	percentCollected(0.1),
-	timeIntervalForRecording(0.0)
+	timeIntervalForRecording(0.0),
+	VisitedLocationTolerance(0.5)
 {}
 
 void Cluster_loop_functions::Init(argos::TConfigurationNode &node) {	
@@ -68,6 +71,10 @@ void Cluster_loop_functions::Init(argos::TConfigurationNode &node) {
 	argos::GetNodeAttribute(Cluster_node, "PrintFinalScore",                   PrintFinalScore);
 	argos::GetNodeAttributeOrDefault(Cluster_node, "percentCollected",                  percentCollected, 0.1);
 	argos::GetNodeAttributeOrDefault(Cluster_node, "TimeIntervalForRecording",         timeIntervalForRecording, 0.0);
+	argos::GetNodeAttributeOrDefault(Cluster_node, "LowClusterReturnTimeoutSeconds",   LowClusterReturnTimeoutSeconds, LowClusterReturnTimeoutSeconds);
+	argos::GetNodeAttributeOrDefault(Cluster_node, "LowClusterPriorityWarmupSeconds",  LowClusterPriorityWarmupSeconds, LowClusterPriorityWarmupSeconds);
+
+	argos::GetNodeAttributeOrDefault(Cluster_node, "VisitedLocationTolerance", VisitedLocationTolerance, 0.5);
 
 	UninformedSearchVariation = ToRadians(USV_InDegrees);
 	argos::TConfigurationNode settings_node = argos::GetNode(node, "settings");
@@ -148,6 +155,7 @@ void Cluster_loop_functions::Reset() {
 	PheromoneList.clear();
 	FidelityList.clear();
 	LowClusterTargetList.clear();
+	LowClusterMissions.clear();
 	//TargetRayList.clear();
 	//TargetRayColorList.clear();
     RobotTrails.clear();
@@ -198,6 +206,8 @@ void Cluster_loop_functions::PreStep() {
 }
 
 void Cluster_loop_functions::PostStep() {
+	ProcessLowClusterMissionTimeouts();
+
 	// Update visited location clusters periodically (every 5 seconds)
 	// This ensures clusters are created even if robots aren't returning with food
 	size_t ticksPerUpdate = GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick() * 5;
@@ -213,9 +223,71 @@ void Cluster_loop_functions::PostStep() {
 		double currentTime = getSimTimeInSeconds();
 		double timeInSeconds = currentTime - timeIntervalForRecording; // Time since last recording
 		// random_seed,milestone_percent,time_interval,cumulative_time,food_distribution,algorithm_mode,num_robots,total_food
-		printf("%lu, %f, %f, %f, %d, %d, %lu, %lu\n", RandomSeed, percentCollected*100, timeInSeconds, currentTime, FoodDistribution, 0, Num_robots, foodCollected);
+		printf("%lu, %f, %f, %f, %ld, %d, %lu, %lu\n", RandomSeed, percentCollected*100, timeInSeconds, currentTime, FoodDistribution, 0, Num_robots, foodCollected);
 		timeIntervalForRecording = currentTime;
 		percentCollected += 0.1;
+	}
+}
+
+void Cluster_loop_functions::RegisterLowClusterMission(const std::string& robotId,
+		const argos::CVector2& targetLocation,
+		size_t dispatchTick) {
+	size_t ticksPerSecond = GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick();
+	size_t timeoutTicks = static_cast<size_t>(std::max<argos::Real>(1.0, LowClusterReturnTimeoutSeconds * ticksPerSecond));
+
+	LowClusterMission mission;
+	mission.targetLocation = targetLocation;
+	mission.dispatchTick = dispatchTick;
+	mission.timeoutTick = dispatchTick + timeoutTicks;
+	LowClusterMissions[robotId] = mission;
+}
+
+void Cluster_loop_functions::ResolveLowClusterMission(const std::string& robotId, int missionOutcome) {
+	auto it = LowClusterMissions.find(robotId);
+	if(it == LowClusterMissions.end()) {
+		LowClusterTargetList.erase(robotId);
+		return;
+	}
+
+	if(missionOutcome == 0) {
+		AddMaxRadiusClusterAt(it->second.targetLocation);
+	}
+
+	LowClusterMissions.erase(it);
+	LowClusterTargetList.erase(robotId);
+}
+
+void Cluster_loop_functions::ProcessLowClusterMissionTimeouts() {
+	if(LowClusterMissions.empty()) {
+		return;
+	}
+
+	const size_t currentTick = GetSpace().GetSimulationClock();
+	for(auto it = LowClusterMissions.begin(); it != LowClusterMissions.end();) {
+		if(currentTick >= it->second.timeoutTick) {
+			LowClusterTargetList.erase(it->first);
+			AddMaxRadiusClusterAt(it->second.targetLocation);
+			it = LowClusterMissions.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
+void Cluster_loop_functions::AddMaxRadiusClusterAt(const argos::CVector2& targetLocation) {
+	for(const auto& cluster : VisitedClusters) {
+		if((targetLocation - cluster.center).SquareLength() <= (cluster.radius * cluster.radius)) {
+			return;
+		}
+	}
+
+	VisitedCluster forcedCluster(targetLocation, MaxClusterRadius);
+	forcedCluster.visitCount = 1;
+	forcedCluster.clusterId = nextClusterId++;
+	VisitedClusters.push_back(forcedCluster);
+
+	if(VisitedClusters.size() > MaxClusterCount) {
+		MaxClusterCount = VisitedClusters.size();
 	}
 }
 
@@ -542,6 +614,17 @@ double Cluster_loop_functions::getRateOfPheromoneDecay() {
 	return RateOfPheromoneDecay;
 }
 
+argos::Real Cluster_loop_functions::getLowClusterPriorityWeight() {
+	if(LowClusterPriorityWarmupSeconds <= 0.0) {
+		return 1.0;
+	}
+
+	const argos::Real ticksPerSecond = GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick();
+	const argos::Real elapsedSeconds = static_cast<argos::Real>(GetSpace().GetSimulationClock()) / ticksPerSecond;
+	const argos::Real weight = elapsedSeconds / LowClusterPriorityWarmupSeconds;
+	return std::max<argos::Real>(0.0, std::min<argos::Real>(1.0, weight));
+}
+
 argos::Real Cluster_loop_functions::getSimTimeInSeconds() {
 	int ticks_per_second = GetSimulator().GetPhysicsEngine("Default").GetInverseSimulationClockTick();
 	float sim_time = GetSpace().GetSimulationClock();
@@ -600,7 +683,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// Use full configured cluster radius as DBSCAN neighborhood distance.
 	// Using MaxClusterRadius/10 was too restrictive and prevented clusters
 	// from forming in typical runs, which made VisitedClusters appear empty.
-	const argos::Real eps = 0.5;
+	const argos::Real eps = VisitedLocationTolerance + 0.001; // Add a small epsilon to prevent numerical issues with points that are very close to the radius boundary
 	const argos::Real epsSq = eps * eps;
 	const argos::Real growthSlack = eps * 0.1; // Allow clusters to grow slightly beyond the strict radius when merging in new points/clusters, to prevent excessive fragmentation. This is necessary because the cluster radius can only grow when merging in new points/clusters, not shrink, so if a cluster grows too large due to an outlier point, it can never be repaired and will just keep absorbing nearby points/clusters.
  	const argos::Real maxRadiusTolerance = 1e-2;
