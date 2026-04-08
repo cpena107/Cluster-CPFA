@@ -624,7 +624,7 @@ void Cluster_controller::Returning() {
 		// located at the last place it picked up food.
 		argos::Real poissonCDF_pLayRate    = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLayingPheromone);
 		argos::Real poissonCDF_sFollowRate = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfSiteFidelity);
-		argos::Real poissonCDF_sFollowRateLowCluster = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLowClusterSearch);
+		argos::Real poissonCDF_sFollowRateLowCluster = 1/GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLowClusterSearch);
 		argos::Real lowClusterPriorityWeight = LoopFunctions->getLowClusterPriorityWeight();
 		argos::Real adjustedLowClusterFollowRate = poissonCDF_sFollowRateLowCluster * lowClusterPriorityWeight;
 		argos::Real r1 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));

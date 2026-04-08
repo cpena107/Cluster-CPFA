@@ -42,6 +42,12 @@ process_files() {
             
             # Create output directory if it doesn't exist
             mkdir -p "$output_dir"
+
+            # if the summary file already exists, skip processing
+            if [ -f "$summary_file" ]; then
+                echo "Skipping $filename; output already exists."
+                continue
+            fi
             
             echo "Converting $filename..."
             echo "  -> Target: $dist_folder ($res_count resources)"

@@ -42,10 +42,17 @@ for analysis_dir in $(ls -d resource_collection_all/resource_collection_analysis
                         echo "     [FAILURE] Script returned non-zero exit code"
                     fi
 
+                    # Return to base directory
+                    cd "$BASE_DIR" || exit 1
+
                     percent_script_path="$target_dir/plot_48_resources_summary.py"
 
                     if [ -f "$percent_script_path" ]; then
                         echo "  -> Running summary plot in: $target_dir"
+                        
+                        # Navigate to the directory to ensure relative paths work correctly
+                        cd "$target_dir" || continue
+                        
                         if python3 plot_48_resources_summary.py; then
                             mkdir -p "$BASE_DIR/analysis_plots_${analysis_dir#resource_collection_analysis_}"
                             mv *distribution_48.* "$BASE_DIR/analysis_plots_${analysis_dir#resource_collection_analysis_}/"
