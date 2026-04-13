@@ -199,6 +199,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		argos::Real CalculateClusterCoverage(const VisitedCluster& cluster);
 		void ProcessLowClusterMissionTimeouts();
 		void AddMaxRadiusClusterAt(const argos::CVector2& targetLocation);
+		bool MergeIntoCluster(VisitedCluster& cluster, const argos::CVector2& incomingCenter, argos::Real incomingRadius, size_t incomingCount);
 		double score;
 		int PrintFinalScore;
 

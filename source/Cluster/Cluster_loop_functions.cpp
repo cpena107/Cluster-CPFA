@@ -2,6 +2,14 @@
 #include <algorithm>
 #include <cmath>
 
+struct TempCluster {
+	argos::CVector2 center;
+	argos::Real radius;
+	std::vector<argos::CVector2> members;
+	size_t visitCount;
+	bool merged;
+};
+
 Cluster_loop_functions::Cluster_loop_functions() :
 	RNG(argos::CRandom::CreateRNG("argos")),
 	MaxSimTime(3600 * GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick()),
@@ -665,6 +673,64 @@ void Cluster_loop_functions::RecordSitesCommunicated(size_t siteCount) {
 	SitesCommunicatedCount += 1;
 }
 
+bool Cluster_loop_functions::MergeIntoCluster(VisitedCluster& cluster,
+	                           const argos::CVector2& incomingCenter,
+	                           argos::Real incomingRadius,
+	                           size_t incomingCount) {
+	if(incomingCount == 0) return false;
+	argos::Real arenaArea = GetSpace().GetArenaSize().GetX() * GetSpace().GetArenaSize().GetY();
+	argos::Real threshold = .005 * arenaArea; // Allow clusters to grow by up to 10% of the arena area when merging in new points/clusters, to prevent excessive fragmentation. This is necessary because the cluster radius can only grow when merging in new points/clusters, not shrink, so if a cluster grows too large due to an outlier point, it can never be repaired and will just keep absorbing nearby points/clusters.
+
+	const argos::CVector2 oldCenter = cluster.center;
+	const argos::Real oldRadius = cluster.radius;
+	const size_t oldCount = std::max<size_t>(1, cluster.visitCount);
+	const size_t totalCount = oldCount + incomingCount;
+
+	const argos::Real newX = (oldCenter.GetX() * oldCount + incomingCenter.GetX() * incomingCount) /
+								static_cast<argos::Real>(totalCount);
+	const argos::Real newY = (oldCenter.GetY() * oldCount + incomingCenter.GetY() * incomingCount) /
+								static_cast<argos::Real>(totalCount);
+	TempCluster mergedCluster;
+	mergedCluster.center.Set(newX, newY);
+
+	const argos::Real oldEnvelope = (oldCenter - mergedCluster.center).Length() + oldRadius;
+	const argos::Real incomingEnvelope = (incomingCenter - mergedCluster.center).Length() + incomingRadius;
+	const argos::Real mergedRadius = std::max(oldEnvelope, incomingEnvelope);
+	mergedCluster.radius = std::max(oldRadius, mergedRadius);
+
+	auto intersectionArea = [](const argos::CVector2& c1, argos::Real r1, const argos::CVector2& c2, argos::Real r2) {
+		argos::Real d = (c1 - c2).Length();
+		if (d >= r1 + r2) {
+			return 0.0; // No overlap
+		}
+		if (d <= std::abs(r1 - r2)) {
+			return M_PI * std::min(r1, r2) * std::min(r1, r2); // One circle is inside the other
+		}
+		argos::Real r1Sq = r1 * r1;
+		argos::Real r2Sq = r2 * r2;
+		argos::Real dSq = d * d;
+
+		argos::Real part1 = r1Sq * std::acos((dSq + r1Sq - r2Sq) / (2 * d * r1));
+		argos::Real part2 = r2Sq * std::acos((dSq + r2Sq - r1Sq) / (2 * d * r2));
+		argos::Real part3 = 0.5 * std::sqrt((-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2));
+
+		return part1 + part2 - part3;
+	};
+
+	// check if area of cluster 1 + area of cluster 2 is less than area of merged cluster within a threshold
+	// The threshold is calculated based on the growthSlack and the size of the arena
+	argos::Real mergedArea = M_PI * mergedCluster.radius * mergedCluster.radius;
+	argos::Real individualAreas = (M_PI * oldRadius * oldRadius) + (M_PI * incomingRadius * incomingRadius) - intersectionArea(cluster.center, oldRadius, incomingCenter, incomingRadius);
+	//argos::Real areaThreshold = (growthSlack * growthSlack) / arenaArea; // This threshold allows for some growth when merging, but prevents excessive merging that would lead to large clusters that don't reflect the actual distribution of visited locations. The exact value can be tuned based on the expected density of visited locations and the desired sensitivity of clustering.
+	if (mergedArea - individualAreas <= (individualAreas + threshold)) {
+		cluster.center = mergedCluster.center;
+		cluster.radius = mergedCluster.radius;
+		cluster.visitCount += incomingCount;
+		return true;
+	}
+	return false;
+};
+
 /*****
  * Memoized clustering pipeline:
  * 1) Build clusters from *new* VisitedLocations with DBSCAN.
@@ -725,30 +791,6 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 		cluster.radius = std::max(previousRadius, recomputedRadius);
 	};
 
-	auto MergeIntoCluster = [&](VisitedCluster& cluster,
-	                           const argos::CVector2& incomingCenter,
-	                           argos::Real incomingRadius,
-	                           size_t incomingCount) {
-		if(incomingCount == 0) return;
-
-		const argos::CVector2 oldCenter = cluster.center;
-		const argos::Real oldRadius = cluster.radius;
-		const size_t oldCount = std::max<size_t>(1, cluster.visitCount);
-		const size_t totalCount = oldCount + incomingCount;
-
-		const argos::Real newX = (oldCenter.GetX() * oldCount + incomingCenter.GetX() * incomingCount) /
-		                         static_cast<argos::Real>(totalCount);
-		const argos::Real newY = (oldCenter.GetY() * oldCount + incomingCenter.GetY() * incomingCount) /
-		                         static_cast<argos::Real>(totalCount);
-		cluster.center.Set(newX, newY);
-
-		const argos::Real oldEnvelope = (oldCenter - cluster.center).Length() + oldRadius;
-		const argos::Real incomingEnvelope = (incomingCenter - cluster.center).Length() + incomingRadius;
-		const argos::Real mergedRadius = std::max(oldEnvelope, incomingEnvelope);
-		cluster.radius = std::max(oldRadius, mergedRadius);
-		cluster.visitCount += incomingCount;
-	};
-
 	auto IsCenterInsideCluster = [&](const argos::CVector2& center, const VisitedCluster& cluster, argos::Real buffer) {
 		const argos::Real r = cluster.radius + buffer;
 		return DistanceSq(center, cluster.center) <= r * r;
@@ -762,13 +804,6 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	auto AreClustersOverlapping = [&](const VisitedCluster& c1, const VisitedCluster& c2, argos::Real buffer) {
 		const argos::Real centerDistance = (c1.center - c2.center).Length();
 		return centerDistance <= (c1.radius + c2.radius + buffer);
-	};
-
-	struct TempCluster {
-		argos::CVector2 center;
-		argos::Real radius;
-		std::vector<argos::CVector2> members;
-		bool merged;
 	};
 
 	// -------------------------
@@ -786,10 +821,10 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				if(IsMaxSizedCluster(cluster)) {
 					cluster.visitCount += 1;
 				} else {
-					MergeIntoCluster(cluster, point, 0.0, 1);
+					merged = MergeIntoCluster(cluster, point, 0.0, 1);
+
 				}
 				ClusteredVisitedLocations.push_back(point);
-				merged = true;
 				break;
 			}
 		}
@@ -814,10 +849,9 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				if(IsMaxSizedCluster(cluster)) {
 					cluster.visitCount += 1;
 				} else {
-					MergeIntoCluster(cluster, point, 0.0, 1);
+					merged = MergeIntoCluster(cluster, point, 0.0, 1);
 				}
 				ClusteredVisitedLocations.push_back(point);
-				merged = true;
 				break;
 			}
 		}
@@ -929,10 +963,9 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				if(IsMaxSizedCluster(cluster)) {
 					cluster.visitCount += 1;
 				} else {
-					MergeIntoCluster(cluster, point, 0.0, 1);
+					merged = MergeIntoCluster(cluster, point, 0.0, 1);
 				}
 				ClusteredVisitedLocations.push_back(point);
-				merged = true;
 				break;
 			}
 		}
@@ -982,9 +1015,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			const bool existingInsideNew = DistanceSq(existingCluster.center, newCluster.center) <=
 				                          (newCluster.radius + growthSlack * 0.25) * (newCluster.radius + growthSlack * 0.25);
 			if(centerInsideExisting || existingInsideNew) {
-				MergeIntoCluster(existingCluster, newCluster.center, newCluster.radius, newCluster.members.size());
-				mergedToExistingCluster = true;
-				break;
+				bool merged = MergeIntoCluster(existingCluster, newCluster.center, newCluster.radius, newCluster.members.size());
+				if(merged) {
+					mergedToExistingCluster = true;
+					break;
+				}
 			}
 		}
 
@@ -1029,7 +1064,10 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				if(IsMaxSizedCluster(cluster)) {
 					cluster.visitCount += 1;
 				} else {
-					MergeIntoCluster(cluster, ExistingVisitedLocations[i], 0.0, 1);
+					bool merged = MergeIntoCluster(cluster, ExistingVisitedLocations[i], 0.0, 1);
+					if(!merged) {
+						continue;
+					}
 				}
 				ClusteredVisitedLocations.push_back(ExistingVisitedLocations[i]);
 				ExistingVisitedLocations.erase(ExistingVisitedLocations.begin() + i);
@@ -1076,7 +1114,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			const bool clustersOverlapping = AreClustersOverlapping(VisitedClusters[i], VisitedClusters[j], coverageBuffer);
 
 			if(jFullyInsideI) {
-				MergeIntoCluster(VisitedClusters[i], VisitedClusters[j].center, VisitedClusters[j].radius, VisitedClusters[j].visitCount);
+				bool merged = MergeIntoCluster(VisitedClusters[i], VisitedClusters[j].center, VisitedClusters[j].radius, VisitedClusters[j].visitCount);
+				if(!merged) {
+					++j;
+					continue;
+				}
 				VisitedClusters.erase(VisitedClusters.begin() + j);
 				continue;
 			}
@@ -1085,7 +1127,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				if(IsMaxSizedCluster(VisitedClusters[j])) {
 					VisitedClusters[j].visitCount += VisitedClusters[i].visitCount;
 				} else {
-					MergeIntoCluster(VisitedClusters[j], VisitedClusters[i].center, VisitedClusters[i].radius, VisitedClusters[i].visitCount);
+					bool merged = MergeIntoCluster(VisitedClusters[j], VisitedClusters[i].center, VisitedClusters[i].radius, VisitedClusters[i].visitCount);
+					if(!merged) {
+						j++;
+						continue;
+					}
 				}
 				VisitedClusters.erase(VisitedClusters.begin() + i);
 				erasedI = true;
@@ -1093,7 +1139,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			}
 
 			if(clustersOverlapping) {
-				MergeIntoCluster(VisitedClusters[i], VisitedClusters[j].center, VisitedClusters[j].radius, VisitedClusters[j].visitCount);
+				bool merged = MergeIntoCluster(VisitedClusters[i], VisitedClusters[j].center, VisitedClusters[j].radius, VisitedClusters[j].visitCount);
+				if(!merged) {
+					++j;
+					continue;
+				}
 				VisitedClusters.erase(VisitedClusters.begin() + j);
 				continue;
 			}
@@ -1127,13 +1177,21 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			const bool iFullyInsideJ = IsClusterFullyInside(VisitedClusters[i], VisitedClusters[j], coverageBuffer);
 
 			if(jFullyInsideI) {
-				MergeIntoCluster(VisitedClusters[i], VisitedClusters[j].center, VisitedClusters[j].radius, VisitedClusters[j].visitCount);
+				bool merged = MergeIntoCluster(VisitedClusters[i], VisitedClusters[j].center, VisitedClusters[j].radius, VisitedClusters[j].visitCount);
+				if(!merged) {
+					++j;
+					continue;
+				}
 				VisitedClusters.erase(VisitedClusters.begin() + j);
 				continue;
 			}
 
 			if(iFullyInsideJ) {
-				MergeIntoCluster(VisitedClusters[j], VisitedClusters[i].center, VisitedClusters[i].radius, VisitedClusters[i].visitCount);
+				bool merged = MergeIntoCluster(VisitedClusters[j], VisitedClusters[i].center, VisitedClusters[i].radius, VisitedClusters[i].visitCount);
+				if(!merged) {
+					++j;
+					continue;
+				}
 				VisitedClusters.erase(VisitedClusters.begin() + i);
 				erasedI = true;
 				break;
@@ -1184,8 +1242,9 @@ argos::CVector2 Cluster_loop_functions::GetLowClusterSearchLocation() {
 					return ratioA < ratioB;
 				});
 			if(worstClusterIt != VisitedClusters.end()) {
+				const VisitedCluster removedCluster = *worstClusterIt;
 				VisitedClusters.erase(worstClusterIt);
-				cout << "Removed cluster with center: (" << worstClusterIt->center.GetX() << ", " << worstClusterIt->center.GetY() << "), radius: " << worstClusterIt->radius << ", visitCount: " << worstClusterIt->visitCount << "\n";
+				cout << "Removed cluster with center: (" << removedCluster.center.GetX() << ", " << removedCluster.center.GetY() << "), radius: " << removedCluster.radius << ", visitCount: " << removedCluster.visitCount << "\n";
 				cout << "Remaining cluster count: " << VisitedClusters.size() << "\n";
 			}
 			sample = 0;

@@ -219,8 +219,10 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), clusterRadius, clusterColor, false);
 
 			// Draw cluster ID to the left of the center for debugging, display only 2 decimal places for radius
-			DrawText(CVector3(x - clusterRadius - 0.1, y, 0.05),
-			         std::to_string(loopFunctions.VisitedClusters[i].clusterId)+", "+std::to_string((int)(clusterRadius*100)/100.0)+", " + std::to_string(loopFunctions.VisitedClusters[i].visitCount)); // ID and radius with 2 decimal places;
+			char buffer[50];
+			snprintf(buffer, sizeof(buffer), "r: %.2f, visits: %d", 
+					 clusterRadius, loopFunctions.VisitedClusters[i].visitCount);
+			DrawText(CVector3(x - clusterRadius - 0.1, y, 0.05), buffer);
 		//}
 	}
 

@@ -803,6 +803,8 @@ void Cluster_controller::SetHoldingFood() {
 
 		// We picked up food. Update the food list minus what we picked up.
 		if(IsHoldingFood() == true) {
+			Stop();
+			while(MovementStack.size() > 0) MovementStack.pop();
 			SetIsHeadingToNest(true);
 			SetTarget(LoopFunctions->NestPosition);
 			LoopFunctions->FoodList = newFoodList;
