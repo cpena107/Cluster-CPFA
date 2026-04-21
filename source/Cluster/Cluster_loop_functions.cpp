@@ -679,7 +679,7 @@ bool Cluster_loop_functions::MergeIntoCluster(VisitedCluster& cluster,
 	                           size_t incomingCount) {
 	if(incomingCount == 0) return false;
 	argos::Real arenaArea = GetSpace().GetArenaSize().GetX() * GetSpace().GetArenaSize().GetY();
-	argos::Real threshold = .005 * arenaArea; // Allow clusters to grow by up to 10% of the arena area when merging in new points/clusters, to prevent excessive fragmentation. This is necessary because the cluster radius can only grow when merging in new points/clusters, not shrink, so if a cluster grows too large due to an outlier point, it can never be repaired and will just keep absorbing nearby points/clusters.
+	argos::Real threshold = .001 * arenaArea; // Allow clusters to grow by up to 10% of the arena area when merging in new points/clusters, to prevent excessive fragmentation. This is necessary because the cluster radius can only grow when merging in new points/clusters, not shrink, so if a cluster grows too large due to an outlier point, it can never be repaired and will just keep absorbing nearby points/clusters.
 
 	const argos::CVector2 oldCenter = cluster.center;
 	const argos::Real oldRadius = cluster.radius;
@@ -722,18 +722,19 @@ bool Cluster_loop_functions::MergeIntoCluster(VisitedCluster& cluster,
 	argos::Real mergedArea = M_PI * mergedCluster.radius * mergedCluster.radius;
 	argos::Real individualAreas = (M_PI * oldRadius * oldRadius) + (M_PI * incomingRadius * incomingRadius) - intersectionArea(cluster.center, oldRadius, incomingCenter, incomingRadius);
 	//argos::Real areaThreshold = (growthSlack * growthSlack) / arenaArea; // This threshold allows for some growth when merging, but prevents excessive merging that would lead to large clusters that don't reflect the actual distribution of visited locations. The exact value can be tuned based on the expected density of visited locations and the desired sensitivity of clustering.
-	if (mergedArea - individualAreas <= (individualAreas + threshold)) {
+	if (mergedArea - individualAreas <= threshold) {
 		cluster.center = mergedCluster.center;
 		cluster.radius = mergedCluster.radius;
 		cluster.visitCount += incomingCount;
 		return true;
 	}
 	return false;
-};
+}
 
 /*****
  * Memoized clustering pipeline:
- * 1) Build clusters from *new* VisitedLocations with DBSCAN.
+ * 1) Absorb new visited locations and clusters into existing clusters when possible, and remove those locations from the "new" pool since they are now accounted for in the memoized state. This allows the memoized state to be updated with new information without having to redo the entire clustering process from scratch, which can be computationally expensive as the number of visited locations grows. 
+ * Build clusters from *new* VisitedLocations with DBSCAN.
  * 2) Try to merge only new items (new singleton points and new clusters)
  *    into existing memoized state (ExistingVisitedLocations + VisitedClusters).
  * 3) Run one consolidation pass on existing memoized state:
@@ -818,12 +819,12 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				? cluster.radius
 				: (cluster.radius + growthSlack);
 			if(DistanceSq(point, cluster.center) <= acceptR * acceptR) {
-				if(IsMaxSizedCluster(cluster)) {
-					cluster.visitCount += 1;
-				} else {
+				//if(IsMaxSizedCluster(cluster)) {
+				//	cluster.visitCount += 1;
+				//} else {
 					merged = MergeIntoCluster(cluster, point, 0.0, 1);
 
-				}
+				//}
 				ClusteredVisitedLocations.push_back(point);
 				break;
 			}
@@ -846,11 +847,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				? cluster.radius
 				: (cluster.radius + growthSlack);
 			if(DistanceSq(point, cluster.center) <= acceptR * acceptR) {
-				if(IsMaxSizedCluster(cluster)) {
+				//if(IsMaxSizedCluster(cluster)) {
 					cluster.visitCount += 1;
-				} else {
+				//} else {
 					merged = MergeIntoCluster(cluster, point, 0.0, 1);
-				}
+				//}
 				ClusteredVisitedLocations.push_back(point);
 				break;
 			}
@@ -960,11 +961,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				? cluster.radius
 				: (cluster.radius + growthSlack);
 			if(DistanceSq(point, cluster.center) <= acceptR * acceptR) {
-				if(IsMaxSizedCluster(cluster)) {
-					cluster.visitCount += 1;
-				} else {
+				//if(IsMaxSizedCluster(cluster)) {
+				//	cluster.visitCount += 1;
+				//} else {
 					merged = MergeIntoCluster(cluster, point, 0.0, 1);
-				}
+				//}
 				ClusteredVisitedLocations.push_back(point);
 				break;
 			}
@@ -1002,7 +1003,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 		bool mergedToExistingCluster = false;
 
 		for(auto& existingCluster : VisitedClusters) {
-			if(IsMaxSizedCluster(existingCluster)) {
+			/*if(IsMaxSizedCluster(existingCluster)) {
 				VisitedCluster incoming(newCluster.center, newCluster.radius);
 				if(IsClusterFullyInside(incoming, existingCluster, 0.0)) {
 					existingCluster.visitCount += newCluster.members.size();
@@ -1010,7 +1011,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 					break;
 				}
 				continue;
-			}
+			}*/
 			const bool centerInsideExisting = IsCenterInsideCluster(newCluster.center, existingCluster, growthSlack * 0.25);
 			const bool existingInsideNew = DistanceSq(existingCluster.center, newCluster.center) <=
 				                          (newCluster.radius + growthSlack * 0.25) * (newCluster.radius + growthSlack * 0.25);
@@ -1061,14 +1062,14 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 				? cluster.radius
 				: (cluster.radius + growthSlack);
 			if(DistanceSq(ExistingVisitedLocations[i], cluster.center) <= acceptR * acceptR) {
-				if(IsMaxSizedCluster(cluster)) {
+				//if(IsMaxSizedCluster(cluster)) {
 					cluster.visitCount += 1;
-				} else {
+				//} else {
 					bool merged = MergeIntoCluster(cluster, ExistingVisitedLocations[i], 0.0, 1);
 					if(!merged) {
 						continue;
 					}
-				}
+				//}
 				ClusteredVisitedLocations.push_back(ExistingVisitedLocations[i]);
 				ExistingVisitedLocations.erase(ExistingVisitedLocations.begin() + i);
 				absorbed = true;
@@ -1086,7 +1087,7 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// ------------------------
 	for(size_t i = 0; i < VisitedClusters.size();) {
 		bool erasedI = false;
-		if(IsMaxSizedCluster(VisitedClusters[i])) {
+		/*if(IsMaxSizedCluster(VisitedClusters[i])) {
 			for(size_t j = i + 1; j < VisitedClusters.size();) {
 				const argos::Real coverageBuffer = growthSlack * 0.1;
 				const bool jFullyInsideI = IsClusterFullyInside(VisitedClusters[j], VisitedClusters[i], coverageBuffer);
@@ -1099,40 +1100,41 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 			}
 			++i;
 			continue;
-		}
+		}*/
 		for(size_t j = i + 1; j < VisitedClusters.size();) {
 			const argos::Real coverageBuffer = growthSlack * 0.1;
 			const bool jFullyInsideI = IsClusterFullyInside(VisitedClusters[j], VisitedClusters[i], coverageBuffer);
 			const bool iFullyInsideJ = IsClusterFullyInside(VisitedClusters[i], VisitedClusters[j], coverageBuffer);
-			if(IsMaxSizedCluster(VisitedClusters[j]) && !jFullyInsideI) {
+			/*if(IsMaxSizedCluster(VisitedClusters[j]) && !jFullyInsideI) {
 				j++;
 				continue;
 			}
 			if(IsMaxSizedCluster(VisitedClusters[i]) && !iFullyInsideJ) {
 				break;
-			}
+			}*/
 			const bool clustersOverlapping = AreClustersOverlapping(VisitedClusters[i], VisitedClusters[j], coverageBuffer);
 
 			if(jFullyInsideI) {
-				bool merged = MergeIntoCluster(VisitedClusters[i], VisitedClusters[j].center, VisitedClusters[j].radius, VisitedClusters[j].visitCount);
-				if(!merged) {
-					++j;
-					continue;
-				}
+				VisitedClusters[i].visitCount += VisitedClusters[j].visitCount;
+				//bool merged = MergeIntoCluster(VisitedClusters[i], VisitedClusters[j].center, VisitedClusters[j].radius, VisitedClusters[j].visitCount);
+				//if(!merged) {
+				//	++j;
+				//	continue;
+				//}
 				VisitedClusters.erase(VisitedClusters.begin() + j);
 				continue;
 			}
 
 			if(iFullyInsideJ) {
-				if(IsMaxSizedCluster(VisitedClusters[j])) {
-					VisitedClusters[j].visitCount += VisitedClusters[i].visitCount;
-				} else {
-					bool merged = MergeIntoCluster(VisitedClusters[j], VisitedClusters[i].center, VisitedClusters[i].radius, VisitedClusters[i].visitCount);
-					if(!merged) {
-						j++;
-						continue;
-					}
-				}
+				//if(IsMaxSizedCluster(VisitedClusters[j])) {
+				VisitedClusters[j].visitCount += VisitedClusters[i].visitCount;
+				//} else {
+					//bool merged = MergeIntoCluster(VisitedClusters[j], VisitedClusters[i].center, VisitedClusters[i].radius, VisitedClusters[i].visitCount);
+					//if(!merged) {
+					//	j++;
+					//	continue;
+					//}
+				//}
 				VisitedClusters.erase(VisitedClusters.begin() + i);
 				erasedI = true;
 				break;
@@ -1163,15 +1165,15 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 	// Step 3c: compare clusters with max radius and merge them if they are inside each other
 	for(size_t i = 0; i < VisitedClusters.size();) {
 		bool erasedI = false;
-		if(VisitedClusters[i].radius < MaxClusterRadius - maxRadiusTolerance) {
-			++i;
-			continue;
-		}
+		//if(VisitedClusters[i].radius < MaxClusterRadius - maxRadiusTolerance) {
+		//	++i;
+		//	continue;
+		//}
 		for(size_t j = i + 1; j < VisitedClusters.size();) {
-			if(VisitedClusters[j].radius < MaxClusterRadius - maxRadiusTolerance) {
-				j++;
-				continue;
-			}
+			//if(VisitedClusters[j].radius < MaxClusterRadius - maxRadiusTolerance) {
+			//	j++;
+			//	continue;
+			//}
 			const argos::Real coverageBuffer = growthSlack * 0.1;
 			const bool jFullyInsideI = IsClusterFullyInside(VisitedClusters[j], VisitedClusters[i], coverageBuffer);
 			const bool iFullyInsideJ = IsClusterFullyInside(VisitedClusters[i], VisitedClusters[j], coverageBuffer);
