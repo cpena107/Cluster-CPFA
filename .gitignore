@@ -19,7 +19,7 @@ tramp
 build
 results
 log
-log.txt
+*log.txt
 argos3-examples
 CPFA*
 resource*
