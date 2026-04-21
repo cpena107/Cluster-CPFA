@@ -7,6 +7,7 @@ def generate_xml_content(dist_name, count, visited_tolerance, rec_freq, max_visi
     num_clusters = "0"
     cluster_width = "8" # default random
     cluster_length = "8" # default random
+    max_radius = max_radius * 100
     
     if dist_name == "clustered":
         food_dist_val = "1"

@@ -1,398 +1,89 @@
-#!/usr/bin/env python3
-
-import argparse
-import csv
-from dataclasses import dataclass
-import math
-from pathlib import Path
-from typing import Iterable, List, Tuple
-
+import os
 import pandas as pd
 from scipy.stats import ttest_ind
 
+BASE_DIR = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "resource_collection_all",
+    "resource_collection_analysis_tol_0.75m_freq_2.0s_visited_50_radius_0.75m_arena_14_14",
+)
 
-DEFAULT_DISTRIBUTIONS = [
-    "random_distribution",
-    "powerlaw_distribution",
-    "cluster_distribution",
-]
-
-
-@dataclass(frozen=True)
-class ComparisonSpec:
-    left: str
-    right: str
-
-    @property
-    def label(self) -> str:
-        return f"{self.left}_vs_{self.right}"
+DISTRIBUTIONS = ["cluster_distribution", "powerlaw_distribution", "random_distribution"]
+RESOURCE_COUNTS = [8, 16, 24, 32, 40, 48, 64, 80]
 
 
-def parse_pairs(raw_pairs: Iterable[str]) -> List[ComparisonSpec]:
-    pairs: List[ComparisonSpec] = []
-    for raw in raw_pairs:
-        if ":" not in raw:
-            raise ValueError(f"Invalid pair '{raw}'. Expected format left:right")
-        left, right = [item.strip() for item in raw.split(":", 1)]
-        if not left or not right:
-            raise ValueError(f"Invalid pair '{raw}'. Both group names are required")
-        pairs.append(ComparisonSpec(left=left, right=right))
-    if not pairs:
-        raise ValueError("At least one comparison pair must be provided")
-    return pairs
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Run Welch t-tests on resource collection details CSVs across "
-            "distribution/resource/milestone slices."
-        )
+def load_completion_times(distribution: str, n_resources: int, group: str) -> pd.Series:
+    """Return cumulative_time at milestone 100% for each seed in baseline or new."""
+    csv_path = os.path.join(
+        BASE_DIR,
+        distribution,
+        f"{n_resources}_resources",
+        group,
+        "resource_collection_analysis_details.csv",
     )
-    parser.add_argument(
-        "--analysis-dir",
-        required=True,
-        help="Path to resource_collection_analysis_* directory",
-    )
-    parser.add_argument(
-        "--resources",
-        type=int,
-        nargs="+",
-        default=[16, 32, 48, 64, 80],
-        help="Resource counts to include (default: 16 32 48 64 80)",
-    )
-    parser.add_argument(
-        "--milestones",
-        type=float,
-        nargs="+",
-        default=[25, 50, 75, 100],
-        help="Milestone percentages to include (default: 25 50 75 100)",
-    )
-    parser.add_argument(
-        "--pairs",
-        nargs="+",
-        default=["new:baseline", "new:algorithm"],
-        help="Comparison pairs in format left:right (default: new:baseline new:algorithm)",
-    )
-    parser.add_argument(
-        "--alternative",
-        choices=["two-sided", "less", "greater"],
-        default="two-sided",
-        help="Alternative hypothesis for Welch t-test (default: two-sided)",
-    )
-    parser.add_argument(
-        "--output",
-        default="stat_tests_ttest.csv",
-        help="Output CSV filename (written inside --analysis-dir unless absolute)",
-    )
-    return parser.parse_args()
-
-
-def load_details_csv(csv_path: Path) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
-    required_columns = {"milestone_percent", "cumulative_time"}
-    missing = required_columns.difference(df.columns)
-    if missing:
-        raise ValueError(f"Missing required columns {sorted(missing)} in {csv_path}")
-
-    df = df[["milestone_percent", "cumulative_time"]].copy()
-    df["milestone_percent"] = pd.to_numeric(df["milestone_percent"], errors="coerce")
-    df["cumulative_time"] = pd.to_numeric(df["cumulative_time"], errors="coerce")
-    df = df.dropna(subset=["milestone_percent", "cumulative_time"])
-    return df
+    completed = df[df["milestone_percent"] == 100.0]["cumulative_time"]
+    return completed.reset_index(drop=True)
 
 
-def sample_for_group(
-    analysis_dir: Path,
-    distribution: str,
-    resource_count: int,
-    group_name: str,
-    milestone: float,
-) -> List[float]:
-    csv_path = (
-        analysis_dir
-        / distribution
-        / f"{resource_count}_resources"
-        / group_name
-        / "resource_collection_analysis_details.csv"
+def main(baseline: str = "baseline", new: str = "new"):
+    results = []
+
+    for dist in DISTRIBUTIONS:
+        dist_label = dist.replace("_distribution", "")
+        for n in RESOURCE_COUNTS:
+            try:
+                baseline_results = load_completion_times(dist, n, baseline)
+                new_results = load_completion_times(dist, n, new)
+            except FileNotFoundError:
+                continue
+
+            t_stat, p_val = ttest_ind(baseline_results, new_results, equal_var=False)
+            results.append(
+                {
+                    "distribution": dist_label.capitalize(),
+                    "resources": n,
+                    "baseline_mean": round(baseline_results.mean(), 2),
+                    "new_mean": round(new_results.mean(), 2),
+                    #"t_statistic": round(t_stat, 4),
+                    "p_value": p_val,
+                    "significant (p<0.05)": p_val < 0.05,
+                }
+            )
+
+    if baseline == "baseline":
+        baseline_label = "CPFA"
+    else:
+        baseline_label = "GPFA"
+    new_label = "CCPFA"
+    
+    df_results = pd.DataFrame(results)
+    pd.set_option("display.float_format", "{:.4f}".format)
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.width", 140)
+    #print(df_results.to_string(index=False))
+
+    out_path = os.path.join(os.path.dirname(__file__), "ttest_results.csv")
+    df_results.to_csv(out_path, index=False)
+    #print(f"\nResults saved to {out_path}")
+
+    # LaTeX output
+    latex_df = df_results.copy()
+    latex_df["p_value"] = latex_df["p_value"].apply(lambda x: f"{x:.4f}" if x >= 0.0001 else "<0.0001")
+    latex_df["significant (p<0.05)"] = latex_df["significant (p<0.05)"].apply(lambda x: "Yes" if x else "No")
+    latex_df.columns = ["Distribution", "Resources", f"{baseline_label} Mean (s)", f"{new_label} Mean (s)", "p-value", "Significant"]
+    latex_str = latex_df.to_latex(
+        index=False,
+        column_format="|l|l|r|r||r|l|",
+        escape=False,
+        caption=f"Experiment I: {baseline_label} vs {new_label} Algorithm (cumulative completion time in seconds)",
+        label=f"tab:ttest_results_{baseline}_{new}",
     )
-    if not csv_path.exists():
-        return []
-
-    df = load_details_csv(csv_path)
-    subset = df[df["milestone_percent"] == milestone]
-    return subset["cumulative_time"].tolist()
-
-
-def pooled_std(sample_a: pd.Series, sample_b: pd.Series) -> float:
-    n_a = len(sample_a)
-    n_b = len(sample_b)
-    if n_a < 2 or n_b < 2:
-        return float("nan")
-    var_a = sample_a.var(ddof=1)
-    var_b = sample_b.var(ddof=1)
-    denom = n_a + n_b - 2
-    if denom <= 0:
-        return float("nan")
-    pooled_var = ((n_a - 1) * var_a + (n_b - 1) * var_b) / denom
-    if pooled_var <= 0:
-        return float("nan")
-    return float(pooled_var ** 0.5)
-
-
-def cohens_d(sample_a: pd.Series, sample_b: pd.Series) -> float:
-    s_pooled = pooled_std(sample_a, sample_b)
-    if pd.isna(s_pooled) or s_pooled == 0:
-        return float("nan")
-    return float((sample_a.mean() - sample_b.mean()) / s_pooled)
-
-
-def welch_df(sample_a: pd.Series, sample_b: pd.Series) -> float:
-    n_a = len(sample_a)
-    n_b = len(sample_b)
-    if n_a < 2 or n_b < 2:
-        return float("nan")
-    var_a = sample_a.var(ddof=1)
-    var_b = sample_b.var(ddof=1)
-    term_a = var_a / n_a
-    term_b = var_b / n_b
-    numerator = (term_a + term_b) ** 2
-    denominator = (term_a ** 2) / (n_a - 1) + (term_b ** 2) / (n_b - 1)
-    if denominator == 0:
-        return float("nan")
-    return float(numerator / denominator)
-
-
-def adjust_pvalues_holm(p_values: List[float]) -> List[float]:
-    m = len(p_values)
-    if m == 0:
-        return []
-
-    indexed = sorted(enumerate(p_values), key=lambda item: item[1])
-    adjusted_sorted = [0.0] * m
-    running_max = 0.0
-
-    for rank, (_, p_val) in enumerate(indexed):
-        factor = m - rank
-        candidate = min(1.0, factor * p_val)
-        running_max = max(running_max, candidate)
-        adjusted_sorted[rank] = running_max
-
-    adjusted = [0.0] * m
-    for rank, (original_index, _) in enumerate(indexed):
-        adjusted[original_index] = adjusted_sorted[rank]
-    return adjusted
-
-
-def adjust_pvalues_fdr_bh(p_values: List[float]) -> List[float]:
-    m = len(p_values)
-    if m == 0:
-        return []
-
-    indexed = sorted(enumerate(p_values), key=lambda item: item[1])
-    adjusted_sorted = [0.0] * m
-    running_min = math.inf
-
-    for rank in range(m - 1, -1, -1):
-        _, p_val = indexed[rank]
-        q_val = ((rank + 1) / m)
-        candidate = min(1.0, p_val / q_val)
-        running_min = min(running_min, candidate)
-        adjusted_sorted[rank] = running_min
-
-    adjusted = [0.0] * m
-    for rank, (original_index, _) in enumerate(indexed):
-        adjusted[original_index] = adjusted_sorted[rank]
-    return adjusted
-
-
-def add_adjusted_pvalues(results: List[dict]) -> None:
-    if not results:
-        return
-    p_values = [float(row["p_value"]) for row in results]
-    holm = adjust_pvalues_holm(p_values)
-    fdr = adjust_pvalues_fdr_bh(p_values)
-    for row, p_holm, p_fdr in zip(results, holm, fdr):
-        row["p_value_holm"] = p_holm
-        row["p_value_fdr_bh"] = p_fdr
-
-
-def run_tests(
-    analysis_dir: Path,
-    distributions: List[str],
-    resources: List[int],
-    milestones: List[float],
-    pairs: List[ComparisonSpec],
-    alternative: str,
-) -> Tuple[List[dict], List[dict]]:
-    results: List[dict] = []
-    skipped: List[dict] = []
-
-    for distribution in distributions:
-        for resource_count in resources:
-            for milestone in milestones:
-                for pair in pairs:
-                    left_sample = sample_for_group(
-                        analysis_dir,
-                        distribution,
-                        resource_count,
-                        pair.left,
-                        milestone,
-                    )
-                    right_sample = sample_for_group(
-                        analysis_dir,
-                        distribution,
-                        resource_count,
-                        pair.right,
-                        milestone,
-                    )
-
-                    if len(left_sample) < 2 or len(right_sample) < 2:
-                        skipped.append(
-                            {
-                                "distribution": distribution,
-                                "resource_count": resource_count,
-                                "milestone_percent": milestone,
-                                "comparison": pair.label,
-                                "reason": "insufficient_samples",
-                                "n_left": len(left_sample),
-                                "n_right": len(right_sample),
-                            }
-                        )
-                        continue
-
-                    left_series = pd.Series(left_sample)
-                    right_series = pd.Series(right_sample)
-                    stat = ttest_ind(
-                        left_series,
-                        right_series,
-                        equal_var=False,
-                        alternative=alternative,
-                        nan_policy="omit",
-                    )
-
-                    results.append(
-                        {
-                            "distribution": distribution,
-                            "resource_count": resource_count,
-                            "milestone_percent": milestone,
-                            "comparison": pair.label,
-                            "left_group": pair.left,
-                            "right_group": pair.right,
-                            "n_left": len(left_series),
-                            "n_right": len(right_series),
-                            "mean_left": float(left_series.mean()),
-                            "mean_right": float(right_series.mean()),
-                            "std_left": float(left_series.std(ddof=1)),
-                            "std_right": float(right_series.std(ddof=1)),
-                            "mean_difference": float(left_series.mean() - right_series.mean()),
-                            "t_statistic": float(stat.statistic),
-                            "p_value": float(stat.pvalue),
-                            "welch_df": welch_df(left_series, right_series),
-                            "cohens_d": cohens_d(left_series, right_series),
-                            "alternative": alternative,
-                        }
-                    )
-
-    return results, skipped
-
-
-def write_csv(rows: List[dict], output_path: Path, fieldnames: List[str]) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def resolve_output_path(analysis_dir: Path, output_arg: str) -> Path:
-    output_path = Path(output_arg)
-    if output_path.is_absolute():
-        return output_path
-    return analysis_dir / output_path
-
-
-def main() -> None:
-    args = parse_args()
-    analysis_dir = Path(args.analysis_dir)
-    if not analysis_dir.exists() or not analysis_dir.is_dir():
-        raise SystemExit(f"Analysis directory does not exist: {analysis_dir}")
-
-    try:
-        pairs = parse_pairs(args.pairs)
-    except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
-
-    results, skipped = run_tests(
-        analysis_dir=analysis_dir,
-        distributions=DEFAULT_DISTRIBUTIONS,
-        resources=sorted(set(args.resources)),
-        milestones=sorted(set(args.milestones)),
-        pairs=pairs,
-        alternative=args.alternative,
-    )
-    add_adjusted_pvalues(results)
-
-    output_path = resolve_output_path(analysis_dir, args.output)
-    fieldnames = [
-        "distribution",
-        "resource_count",
-        "milestone_percent",
-        "comparison",
-        "left_group",
-        "right_group",
-        "n_left",
-        "n_right",
-        "mean_left",
-        "mean_right",
-        "std_left",
-        "std_right",
-        "mean_difference",
-        "t_statistic",
-        "p_value",
-        "p_value_holm",
-        "p_value_fdr_bh",
-        "welch_df",
-        "cohens_d",
-        "alternative",
-    ]
-    write_csv(results, output_path, fieldnames)
-
-    if skipped:
-        skipped_path = output_path.with_name(output_path.stem + "_skipped.csv")
-        write_csv(
-            skipped,
-            skipped_path,
-            [
-                "distribution",
-                "resource_count",
-                "milestone_percent",
-                "comparison",
-                "reason",
-                "n_left",
-                "n_right",
-            ],
-        )
-        print(f"Skipped comparisons written to: {skipped_path}")
-
-    print(f"Wrote {len(results)} test rows to: {output_path}")
-    if results:
-        df = pd.DataFrame(results)
-        top = df.sort_values("p_value").head(10)
-        print("\nTop 10 smallest p-values:")
-        print(
-            top[
-                [
-                    "distribution",
-                    "resource_count",
-                    "milestone_percent",
-                    "comparison",
-                    "p_value",
-                    "cohens_d",
-                ]
-            ].to_string(index=False)
-        )
+    #print("\n% ==== LaTeX Table ====")
+    print(latex_str)
 
 
 if __name__ == "__main__":
-    main()
+    main(baseline="baseline", new="new")
+    main(baseline="algorithm", new="new")

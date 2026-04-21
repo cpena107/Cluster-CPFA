@@ -4,6 +4,7 @@
 # Usage: ./process_experiment_arenas.sh
 
 EXPERIMENTS_DIR="experiments"
+HOME=$(pwd)
 
 if [ ! -d "$EXPERIMENTS_DIR" ]; then
     echo "Error: Directory '$EXPERIMENTS_DIR' not found."
@@ -30,14 +31,17 @@ process_files() {
         # Extract resource count
         if [[ "$filename" =~ ([0-9]+)res ]]; then
             res_count="${BASH_REMATCH[1]}"
+
+            if [ "$res_count" -ne 48 ]; then
+                echo "Skipping $filename; only processing files with 48 resources."
+                continue
+            fi
             
-            # Create a specific folder for resources inside the arena folder
-            # Structure: .../arenas/10x10/16_resources/
-            target_file_dir="${output_dir}/${res_count}_resources"
-            mkdir -p "$target_file_dir"
+            # Create the output directory if it doesn't exist
+            mkdir -p "$output_dir"
             
-            output_file="${target_file_dir}/resource_collection_analysis_details.csv"
-            summary_file="${target_file_dir}/resource_collection_analysis_summary.csv"
+            output_file="${output_dir}/resource_collection_analysis_details.csv"
+            summary_file="${output_dir}/resource_collection_analysis_summary.csv"
 
             # if the summary file already exists, skip processing
             if [ -f "$summary_file" ]; then
@@ -57,7 +61,7 @@ process_files() {
                 python3 scripts/convert_results_format.py \
                     --input_file "$filepath" \
                     --output_file "$output_file" \
-                    --food_distribution "$dist_code"
+                    --food_distribution ""
 
                 if [ $? -ne 0 ]; then
                     echo "  -> Conversion failed for $filename; skipping summary."
@@ -73,6 +77,9 @@ process_files() {
         fi
     done
 }
+
+# Track which configurations have been initialized
+declare -A initialized_configs
 
 # Iterate through all experiment folders
 for exp_folder in "$EXPERIMENTS_DIR"/*/; do
@@ -92,28 +99,53 @@ for exp_folder in "$EXPERIMENTS_DIR"/*/; do
         height="${BASH_REMATCH[3]}"
         
         # Determine the unified analysis folder name
-        analysis_folder="resource_collection_analysis_${config_name}"
+        analysis_folder="resource_collection_arenas/resource_collection_analysis_${config_name}"
+        
+        # Only initialize the analysis folder once per configuration
+        if [ -z "${initialized_configs[$config_name]}" ]; then
+            rm -rf "$analysis_folder"  # Clear existing analysis folder if it exists
+            mkdir -p "$analysis_folder"
+
+            # Copy base analysis script to the analysis folder
+            cp -r resource_collection_analysis/* "$analysis_folder"
+            rm -rf "$analysis_folder/*_distribution"
+            
+            initialized_configs[$config_name]=1
+        fi
         
         # Determine the arena subfolder (e.g., 10x10)
         arena_subfolder="${width}x${height}"
         
-        # Construct the output path: analysis_folder/arenas/10x10/DISTRIBUTION/
-        base_arena_output="$analysis_folder/arenas/$arena_subfolder"
+        # Construct the output path: analysis_folder/arenas/10x10/new
+        base_arena_output="$analysis_folder/arenas/$arena_subfolder/new"
         
         echo "Processing $folder_name -> $base_arena_output"
 
         # 1. Random Distribution
-        process_files "$exp_folder" "$base_arena_output/random_distribution" "random.csv" 0
+        process_files "$exp_folder" "$base_arena_output" "random.csv" 0
 
         # 2. Powerlaw (Semi-Clustered) Distribution
-        process_files "$exp_folder" "$base_arena_output/powerlaw_distribution" "semi_cluster.csv" 1
+        #process_files "$exp_folder" "$base_arena_output/powerlaw_distribution" "semi_cluster.csv" 1
 
         # 3. Clustered Distribution
-        process_files "$exp_folder" "$base_arena_output/cluster_distribution" "clustered.csv" 2
+        #process_files "$exp_folder" "$base_arena_output/" "clustered.csv" 2
 
     else
         echo "Skipping folder with unexpected name format: $folder_name"
     fi
+done
+
+# run analysis on each directory
+for analysis_folder in resource_collection_arenas/resource_collection_analysis_*/; do
+    if [ ! -d "$analysis_folder" ]; then
+        continue
+    fi
+
+    echo "Running analysis for $analysis_folder..."
+    cd "$analysis_folder/arenas"
+    python3 plot_arenas_boxplot.py
+    mv *.png /home/cpena/Documents/8371-01/CPFA-ARGoS/analysis_plots_resource_collection_all/.
+    cd $HOME
 done
 
 echo "Processing complete."
