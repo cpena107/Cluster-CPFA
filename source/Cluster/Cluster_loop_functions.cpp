@@ -679,7 +679,7 @@ bool Cluster_loop_functions::MergeIntoCluster(VisitedCluster& cluster,
 	                           size_t incomingCount) {
 	if(incomingCount == 0) return false;
 	argos::Real arenaArea = GetSpace().GetArenaSize().GetX() * GetSpace().GetArenaSize().GetY();
-	argos::Real threshold = .001 * arenaArea; // Allow clusters to grow by up to 10% of the arena area when merging in new points/clusters, to prevent excessive fragmentation. This is necessary because the cluster radius can only grow when merging in new points/clusters, not shrink, so if a cluster grows too large due to an outlier point, it can never be repaired and will just keep absorbing nearby points/clusters.
+	argos::Real threshold = .01 * arenaArea; // Allow clusters to grow by up to 10% of the arena area when merging in new points/clusters, to prevent excessive fragmentation. This is necessary because the cluster radius can only grow when merging in new points/clusters, not shrink, so if a cluster grows too large due to an outlier point, it can never be repaired and will just keep absorbing nearby points/clusters.
 
 	const argos::CVector2 oldCenter = cluster.center;
 	const argos::Real oldRadius = cluster.radius;
@@ -721,8 +721,11 @@ bool Cluster_loop_functions::MergeIntoCluster(VisitedCluster& cluster,
 	// The threshold is calculated based on the growthSlack and the size of the arena
 	argos::Real mergedArea = M_PI * mergedCluster.radius * mergedCluster.radius;
 	argos::Real individualAreas = (M_PI * oldRadius * oldRadius) + (M_PI * incomingRadius * incomingRadius) - intersectionArea(cluster.center, oldRadius, incomingCenter, incomingRadius);
+	argos::Real areaDifference = mergedArea - individualAreas;
+	// areaWeight will be a value between 0 and 1 that increases as the merged cluster area increases relative to the total visit count of the merged cluster. This allows for more growth when merging larger clusters with more visits, and less growth when merging smaller clusters with fewer visits, which helps prevent excessive merging that would lead to large clusters that don't reflect the actual distribution of visited locations. The exact formula can be tuned based on the expected distribution of visited locations and desired sensitivity of clustering,
+	argos::Real areaWeight = mergedArea / (mergedArea + ((cluster.visitCount + incomingCount) * VisitedLocationTolerance)); // Weight the area difference by the size of the merged cluster and the total visit count, to allow more growth for larger clusters with more visits, and less growth for smaller clusters with fewer visits. The factor of 10.0 is arbitrary and can be tuned based on the expected distribution of visited locations and desired sensitivity of clustering.
 	//argos::Real areaThreshold = (growthSlack * growthSlack) / arenaArea; // This threshold allows for some growth when merging, but prevents excessive merging that would lead to large clusters that don't reflect the actual distribution of visited locations. The exact value can be tuned based on the expected density of visited locations and the desired sensitivity of clustering.
-	if (mergedArea - individualAreas <= threshold) {
+	if (mergedArea - individualAreas <= threshold * areaWeight) {
 		cluster.center = mergedCluster.center;
 		cluster.radius = mergedCluster.radius;
 		cluster.visitCount += incomingCount;
@@ -1158,9 +1161,11 @@ void Cluster_loop_functions::UpdateVisitedClusters() {
 		}
 	}
 
+	// For debugging /////////////////
 	if(VisitedClusters.size() > MaxClusterCount) {
 		MaxClusterCount = VisitedClusters.size();
 	}
+	///////////////
 
 	// Step 3c: compare clusters with max radius and merge them if they are inside each other
 	for(size_t i = 0; i < VisitedClusters.size();) {
