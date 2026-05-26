@@ -47,6 +47,7 @@ void Cluster_qt_user_functions::DrawOnRobot(CFootBotEntity& entity) {
 void Cluster_qt_user_functions::DrawOnArena(CFloorEntity& entity) {
 	DrawFood();
 	DrawFidelity();
+	DrawLowClusterTargets();
 	DrawPheromones();
 	DrawNest();
 	DrawVisitedLocations();
@@ -140,64 +141,142 @@ void Cluster_qt_user_functions::DrawPheromones() {
 	}
 }
 
-void Cluster_qt_user_functions::DrawTargetRays() {
-	//size_t tick = loopFunctions.GetSpace().GetSimulationClock();
-	//size_t tock = loopFunctions.GetSimulator().GetPhysicsEngine("default").GetInverseSimulationClockTick() / 8;
+void Cluster_qt_user_functions::DrawLowClusterTargets() {
+	CSpace& space = CSimulator::GetInstance().GetSpace();
+	CSpace::TMapPerType& footbots = space.GetEntitiesByType("foot-bot");
 
-	//if(tock == 0) tock = 1;
+	// Draw on the top left corner the current count of clusters
+	char buffer[50];
+	snprintf(buffer, sizeof(buffer), "Number of Repulsive Clusters: %d", (int)loopFunctions.VisitedClusters.size());
+	DrawText(CVector3(-loopFunctions.GetSpace().GetArenaSize().GetX() / 2.0 + 0.1, loopFunctions.GetSpace().GetArenaSize().GetY() / 2.0 + 0.05, 0.1), buffer, CColor::RED);
 
-	//if(tick % tock == 0) {
-		for(size_t j = 0; j < loopFunctions.TargetRayList.size(); j++) {
-			DrawRay(loopFunctions.TargetRayList[j], loopFunctions.TargetRayColorList[j]);
+	for(map<string, CVector2>::iterator it = loopFunctions.LowClusterTargetList.begin();
+	    it != loopFunctions.LowClusterTargetList.end(); ++it) {
+		const std::string& robotID = it->first;
+		const CVector2&    target  = it->second;
+
+		// Orange marker at the chosen low-cluster target.
+		DrawCylinder(CVector3(target.GetX(), target.GetY(), 0.0),
+		             CQuaternion(),
+		             loopFunctions.FoodRadius * 2.0, 0.05,
+		             CColor::ORANGE);
+
+		// Blue line from the robot's current position to the target.
+		CSpace::TMapPerType::iterator fbIt = footbots.find(robotID);
+		if(fbIt != footbots.end()) {
+			CFootBotEntity& fb      = *any_cast<CFootBotEntity*>(fbIt->second);
+			CVector3        robotPos = fb.GetEmbodiedEntity().GetOriginAnchor().Position;
+			DrawRay(CRay3(CVector3(robotPos.GetX(), robotPos.GetY(), 0.01),
+			              CVector3(target.GetX(),   target.GetY(),   0.01)),
+			        CColor::BLUE);
 		}
-	//}
+	}
+}
+
+void Cluster_qt_user_functions::DrawTargetRays() {
+	// Draw trails for each robot
+	for(std::map<std::string, std::vector<argos::CRay3>>::iterator it = loopFunctions.RobotTrails.begin(); it != loopFunctions.RobotTrails.end(); ++it) {
+		std::string robotID = it->first;
+		std::vector<argos::CRay3>& trails = it->second;
+		/*
+		CColor color = CColor::BLACK;
+		std::map<std::string, CColor>::iterator colorIt = loopFunctions.RobotTrailColors.find(robotID);
+		if(colorIt != loopFunctions.RobotTrailColors.end()) {
+			color = colorIt->second;
+		}
+		
+		for(size_t j = 0; j < trails.size(); j++) {
+			DrawRay(trails[j], color);
+		}
+			*/
+	}
+
+    CColor c = CColor::BLUE;
+	for(size_t j = 0; j < loopFunctions.SearchLocationRays.size(); j++) {
+			DrawRay(loopFunctions.SearchLocationRays[j],c);
+	}
+
+    // Clear search rays periodically to avoid clutter (every 10 seconds)
+	if(loopFunctions.getSimTimeInSeconds() > 0 && static_cast<size_t>(loopFunctions.getSimTimeInSeconds()) % 50 == 0) {
+		loopFunctions.SearchLocationRays.clear();
+	}
 }
 
 void Cluster_qt_user_functions::DrawVisitedLocations() {
 	// Draw merged clusters as larger magenta dots, or individual yellow dots
 	Real x, y;
 	
-	// First, draw merged clusters (areas with >50% coverage)
+	// First, draw merged clusters 
 	for(size_t i = 0; i < loopFunctions.VisitedClusters.size(); i++) {
-		if(loopFunctions.VisitedClusters[i].isMerged) {
+		//if(loopFunctions.VisitedClusters[i].isMerged) {
 			x = loopFunctions.VisitedClusters[i].center.GetX();
 			y = loopFunctions.VisitedClusters[i].center.GetY();
 			
 			// Draw as a larger magenta dot to indicate a merged/clustered area
 			CColor clusterColor = CColor::MAGENTA;
-			Real clusterRadius = 0.1; // Larger radius for clusters
+			Real clusterRadius = loopFunctions.VisitedClusters[i].radius; // Use stored radius
 			Real clusterHeight = 0.02; // Slightly taller
 			
-			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), clusterRadius, clusterHeight, clusterColor);
-		}
+			/*if(loopFunctions.VisitedClusters[i].isFrozen) {
+				clusterColor = CColor::BLUE;
+				clusterHeight = 0.02; // Slightly taller for merged clusters
+			}*/
+			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), 0.05, clusterHeight, clusterColor);
+			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), clusterRadius, clusterColor, false);
+
+			// Draw cluster ID to the left of the center for debugging, display only 2 decimal places for radius
+			char buffer[50];
+			snprintf(buffer, sizeof(buffer), "r: %.2f, visits: %d", 
+					 clusterRadius, loopFunctions.VisitedClusters[i].visitCount);
+			//DrawText(CVector3(x - clusterRadius - 0.1, y, 0.05), buffer);
+		//}
 	}
 
-	// Then, draw individual visited locations that aren't in merged clusters
-	for(size_t i = 0; i < loopFunctions.VisitedLocations.size(); i++) {
-		x = loopFunctions.VisitedLocations[i].GetX();
-		y = loopFunctions.VisitedLocations[i].GetY();
+	// Then, draw individual visited locations that aren't in merged clusters.
+	// The exclusion radius is expanded by eps (0.5m) to cover compression chain
+	// endpoints that may slightly overshoot the cluster's stored radius due to
+	// ceil() rounding in the chain-step calculation.
+	const Real exclusionBuffer = 0.5; // matches DBSCAN eps in Cluster_loop_functions
+	for(size_t i = 0; i < loopFunctions.ExistingVisitedLocations.size(); i++) {
+		x = loopFunctions.ExistingVisitedLocations[i].GetX();
+		y = loopFunctions.ExistingVisitedLocations[i].GetY();
 		
 		// Check if this location is part of a merged cluster
+		/*
 		bool isInMergedCluster = false;
 		for(size_t j = 0; j < loopFunctions.VisitedClusters.size(); j++) {
 			if(loopFunctions.VisitedClusters[j].isMerged) {
+				Real exclusionRadius = loopFunctions.VisitedClusters[j].radius + exclusionBuffer;
 				CVector2 diff = loopFunctions.VisitedLocations[i] - loopFunctions.VisitedClusters[j].center;
-				if(std::abs(diff.GetX()) <= loopFunctions.VisitedClusters[j].width/2.0 && 
-				   std::abs(diff.GetY()) <= loopFunctions.VisitedClusters[j].height/2.0) {
+				if(diff.SquareLength() <= exclusionRadius * exclusionRadius) {
 					isInMergedCluster = true;
 					break;
 				}
 			}
 		}
-		
+		*/
 		// Only draw individual dots for locations not in merged clusters
-		if(!isInMergedCluster) {
+		
+		//if(!isInMergedCluster) {
 			CColor dotColor = CColor::YELLOW;
-			Real dotRadius = 0.02; // Small radius for the dots
+			Real dotRadius = 0.05; // Small radius for the dots
+			Real dotArea = 0.16; // Contour of the area covered by the dot (for visualization purposes)
 			Real dotHeight = 0.01; // Very small height
 			DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), dotRadius, dotHeight, dotColor);
-		}
+			DrawCircle(CVector3(x, y, 0.01), CQuaternion(), dotArea, CColor::YELLOW, false); // Add a transparent circle to indicate coverage area
+		//}
 	}
+
+	// Draw real robot-visit points that contributed to a cluster in the last
+	// DBSCAN run as small green cylinders for debugging.
+	
+	for(size_t i = 0; i < loopFunctions.ClusteredVisitedLocations.size(); i++) {
+		x = loopFunctions.ClusteredVisitedLocations[i].GetX();
+		y = loopFunctions.ClusteredVisitedLocations[i].GetY();
+		DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), 0.04, 0.03, CColor::GREEN);
+		//DrawCircle(CVector3(x, y, 0.01), CQuaternion(), 0.16, CColor::GREEN, false); // Add a transparent circle to indicate coverage area
+	}
+	
 }
 
 /*

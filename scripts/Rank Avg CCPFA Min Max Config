@@ -1,0 +1,11 @@
+Rank   Avg CCPFA       Min       Max  Config
+   1    2105.943   786.600  3068.050  tol_0.75m_freq_2.0s_visited_75_radius_1.0m
+   2    2119.223   915.950  2804.650  tol_0.75m_freq_2.0s_visited_75_radius_1.75m
+   3    2123.380  1192.975  2703.075  tol_0.75m_freq_2.0s_visited_50_radius_0.75m
+   4    2137.955  1015.825  2832.850  tol_0.75m_freq_1.0s_visited_75_radius_1.25m
+   5    2142.673  1008.675  3007.625  tol_0.75m_freq_1.0s_visited_75_radius_1.0m
+   6    2171.548   909.975  2873.200  tol_0.75m_freq_2.0s_visited_75_radius_0.75m
+   7    2174.863   846.875  3019.475  tol_0.75m_freq_2.0s_visited_75_radius_50.0m
+   8    2177.938  1046.875  2782.100  tol_0.75m_freq_2.0s_visited_50_radius_1.25m
+   9    2198.878   948.500  2983.700  tol_0.75m_freq_2.0s_visited_75_radius_1.25m
+  10    2207.842  1022.450  2897.575  tol_0.75m_freq_2.0s_visited_50_radius_1.75m

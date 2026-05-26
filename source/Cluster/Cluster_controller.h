@@ -27,7 +27,7 @@ class Cluster_controller : public BaseController {
 		bool IsUsingSiteFidelity();
 		bool IsInTheNest();
 
-		Real FoodDistanceTolerance;
+		argos::Real FoodDistanceTolerance;
 
 		void SetLoopFunctions(Cluster_loop_functions* lf);
 
@@ -87,10 +87,13 @@ class Cluster_controller : public BaseController {
 	/* Memory-based search functions */
 	void RecordVisitedLocation(argos::CVector2 location);
 	bool HasVisitedLocation(argos::CVector2 location, argos::Real tolerance);
+	bool HasNearbyFood(argos::CVector2 location, argos::Real toleranceSquared);
 	void SetUnvisitedSearchLocation();
 	void ShareVisitedLocationsWithNest();
 	void ClearVisitedLocations();
 	void DetectLostResource();
+	bool IsWithinForageRange(argos::CVector2 location);
+	void ResolveLowClusterMission(int missionOutcome);
 
 	CVector2 previous_position;
 
@@ -102,9 +105,31 @@ class Cluster_controller : public BaseController {
 
 	/* Memory of visited locations */
 	std::vector<argos::CVector2> VisitedLocations;
+	std::vector<argos::CVector2> ExistingLocations;
+	std::vector<argos::CVector2> UnsharedLocations;
 	argos::Real VisitedLocationTolerance;
+	argos::Real RecordingFrequency;
 	size_t MaxVisitedLocations;
 	bool isLostResource;
+
+	/* Cluster formation variables */
+	argos::Real MaxClusterRadius; // Maximum radius for a cluster in meters
+
+	/* Spiral search variables */
+	void SetSpiralSearchLocation();
+	bool isSpiralSearching;
+	size_t spiralPathIndex;
+	argos::CVector2 spiralCenter;
+	argos::Real spiralRadius;
+    argos::Real spiralStepAngle;
+    argos::Real spiralGrowthRate;
+	size_t MaxSpiralCollisions;
+	size_t spiralCollisionStartCount;
+	bool isLowClusterMission;
+	int lowClusterMissionState;
+
+	
+	
 };
 
 #endif /* Cluster_CONTROLLER_H */

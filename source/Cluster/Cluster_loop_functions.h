@@ -5,6 +5,8 @@
 #include <argos3/plugins/robots/foot-bot/simulator/footbot_entity.h>
 #include <argos3/core/simulator/entity/floor_entity.h>
 #include <source/Cluster/Cluster_controller.h>
+#include <unordered_set>
+#include <unordered_map>
 
 using namespace argos;
 using namespace std;
@@ -51,6 +53,8 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 	void UpdatePheromoneList();
 	void SetFoodDistribution();
 	void UpdateVisitedClusters();
+	void RegisterLowClusterMission(const std::string& robotId, const argos::CVector2& targetLocation, size_t dispatchTick);
+	void ResolveLowClusterMission(const std::string& robotId, int missionOutcome);
 
 	argos::Real getSimTimeInSeconds();		std::vector<argos::CColor>   TargetRayColorList;
 
@@ -62,8 +66,13 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 	double getRateOfInformedSearchDecay();
 	double getRateOfSiteFidelity();
 	double getRateOfLayingPheromone();
+	double getRateOfLowClusterSearch();
 	double getRateOfPheromoneDecay();
+	argos::Real getLowClusterPriorityWeight();
 	argos::CVector2 GetLowClusterSearchLocation();	protected:
+
+		/* Record how many sites a robot communicated to the nest */
+		void RecordSitesCommunicated(size_t siteCount);
 
 		void setScore(double s);
 
@@ -83,18 +92,25 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		size_t FoodDistribution;
 		size_t FoodItemCount;
 		size_t NumberOfClusters;
+		size_t MaxClusterCount;
 		size_t ClusterWidthX;
 		size_t ClusterLengthY;
 		size_t PowerRank;
+
+		/* Running average counters for sites communicated to nest */
+		size_t SitesCommunicatedSum;
+		size_t SitesCommunicatedCount;
 
 	/* Cluster variables */
 	argos::Real ProbabilityOfSwitchingToSearching;
 	argos::Real ProbabilityOfReturningToNest;
 	argos::Real ProbabilityOfSearchingLowClusters;
+	argos::Real InitialProbabilityOfSearchingLowClusters;
 	argos::CRadians UninformedSearchVariation;
 	argos::Real RateOfInformedSearchDecay;
 	argos::Real RateOfSiteFidelity;
 	argos::Real RateOfLayingPheromone;
+	argos::Real RateOfLowClusterSearch;
 	argos::Real RateOfPheromoneDecay;		/* physical robot & world variables */
 		argos::Real FoodRadius;
 		argos::Real FoodRadiusSquared;
@@ -107,30 +123,68 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		std::vector<argos::CVector2> FoodList;
 		std::vector<argos::CColor>   FoodColoringList;
         map<string, argos::CVector2> FidelityList; 
+		map<string, argos::CVector2> LowClusterTargetList;
 		std::vector<Pheromone>   PheromoneList;
-		std::vector<argos::CRay3>    TargetRayList;
+		//std::vector<argos::CRay3>    TargetRayList;
+		std::vector<argos::CRay3>    SearchLocationRays;
+        std::map<std::string, std::vector<argos::CRay3>> RobotTrails;
+        std::map<std::string, CColor> RobotTrailColors;
+		// New visited locations reported since the previous clustering update.
 		std::vector<argos::CVector2> VisitedLocations;
+		// Historical singleton visited locations that did not merge into a cluster.
+		// This acts as memoized "existing visited locations".
+		std::vector<argos::CVector2> ExistingVisitedLocations;
+		// Snapshot of real robot-visit points that contributed to a cluster in the
+		// most recent DBSCAN run.  Populated each UpdateVisitedClusters() call
+		// (before compression) so the renderer can highlight them for debugging.
+		std::vector<argos::CVector2> ClusteredVisitedLocations;
+		size_t LastProcessedLocationIndex;
+		// Number of synthetic chain points at the front of VisitedLocations after
+		// each compression pass. Points at index >= numSyntheticPoints are real
+		// robot visits added since the last update.
+		size_t numSyntheticPoints;
+		// Tracks which VisitedLocations indices have been permanently assigned
+		// to a DBSCAN cluster, so ClusteredVisitedLocations accumulates without
+		// duplicates across multiple UpdateVisitedClusters() calls.
+		std::unordered_set<size_t> clusteredLocationIndices;
 
 		/* Cluster structure for visited locations */
 		struct VisitedCluster {
 			argos::CVector2 center;
-			argos::Real width;
-			argos::Real height;
+			argos::Real radius;
 			size_t visitCount;
-			bool isMerged;
+			int clusterId; // unique ID for debugging
 			
-			VisitedCluster(argos::CVector2 c, argos::Real w, argos::Real h) 
-				: center(c), width(w), height(h), visitCount(0), isMerged(false) {}
+			VisitedCluster(argos::CVector2 c, argos::Real r) 
+				: center(c), radius(r), visitCount(0), clusterId(-1) {}
 		};
 		std::vector<VisitedCluster> VisitedClusters;
+        std::vector<VisitedCluster> FrozenClusters; // Store clusters that reached max radius
+		std::unordered_map<int, VisitedCluster> ClusterMap; // persistent map keyed by cluster ID
+		int nextClusterId;
+
+		struct LowClusterMission {
+			argos::CVector2 targetLocation;
+			size_t dispatchTick;
+			size_t timeoutTick;
+		};
+		std::unordered_map<std::string, LowClusterMission> LowClusterMissions;
+		argos::Real LowClusterReturnTimeoutSeconds;
+		argos::Real LowClusterPriorityWarmupSeconds;
 
 		argos::CRange<argos::Real>   ForageRangeX;
 		argos::CRange<argos::Real>   ForageRangeY;
 
         size_t currNumCollectedFood;
         size_t Num_robots;
+        size_t RobotsReturnedToNest;
         vector<size_t>			ForageList;
 		argos::CVector2 NestPosition;
+		argos::Real MaxClusterRadius;
+		argos::Real percentCollected;
+		argos::Real timeIntervalForRecording;
+		argos::Real VisitedLocationTolerance;
+		argos::vector<argos::CVector2> ClusteredLocationsForRecording;
 
 	private:
 
@@ -142,9 +196,15 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		bool IsCollidingWithNest(argos::CVector2 p);
 		bool IsCollidingWithFood(argos::CVector2 p);
 		void MergeClustersIntoSuperClusters();
+		void MergeTriangularSuperClusters();
 		argos::Real CalculateClusterCoverage(const VisitedCluster& cluster);
+		void ProcessLowClusterMissionTimeouts();
+		void AddMaxRadiusClusterAt(const argos::CVector2& targetLocation);
+		bool MergeIntoCluster(VisitedCluster& cluster, const argos::CVector2& incomingCenter, argos::Real incomingRadius, size_t incomingCount);
 		double score;
 		int PrintFinalScore;
+
+
 };
 
 #endif /* Cluster_LOOP_FUNCTIONS_H */

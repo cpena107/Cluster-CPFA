@@ -1,0 +1,249 @@
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.5m_freq_1s_visited_50_radius_1.0m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  2547.200000
+1         32  2258.925  2094.225  3618.633333
+2         48  2513.500  2661.100  4264.233333
+3         64  3296.875  3041.175  4321.250000
+4         80  3457.000  3380.575  4759.216667
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.5m_freq_1s_visited_50_radius_1.0m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2353.400000
+1         32  3022.750  2236.925  2759.950000
+2         48  3539.650  2355.400  3314.616667
+3         64  3896.125  2695.625  3530.966667
+4         80  3896.125  3074.300  3799.266667
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.5m_freq_1s_visited_50_radius_1.0m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2338.050000
+1         32  2386.175  2149.950  2969.833333
+2         48  2828.850  2429.675  3614.450000
+3         64  3250.875  2919.300  4236.916667
+4         80  3536.750  3175.525  4377.916667
+------------------------------
+--
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.5m_freq_2s_visited_50_radius_0.75m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  2082.550000
+1         32  2258.925  2094.225  3678.833333
+2         48  2513.500  2661.100  3967.316667
+3         64  3296.875  3041.175  4105.533333
+4         80  3457.000  3380.575  4531.100000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.5m_freq_2s_visited_50_radius_0.75m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2074.183333
+1         32  3022.750  2236.925  2841.116667
+2         48  3539.650  2355.400  3050.450000
+3         64  3896.125  2695.625  3530.383333
+4         80  3896.125  3074.300  3547.562500
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.5m_freq_2s_visited_50_radius_0.75m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2502.383333
+1         32  2386.175  2149.950  3124.666667
+2         48  2828.850  2429.675  3368.300000
+3         64  3250.875  2919.300  3968.816667
+4         80  3536.750  3175.525  4229.650000
+------------------------------
+--
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.5m_freq_2s_visited_50_radius_1.25m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  2411.200000
+1         32  2258.925  2094.225  3786.566667
+2         48  2513.500  2661.100  3892.250000
+3         64  3296.875  3041.175  4354.066667
+4         80  3457.000  3380.575  4765.866667
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.5m_freq_2s_visited_50_radius_1.25m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2393.300000
+1         32  3022.750  2236.925  3131.716667
+2         48  3539.650  2355.400  3255.366667
+3         64  3896.125  2695.625  3430.883333
+4         80  3896.125  3074.300  3669.150000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.5m_freq_2s_visited_50_radius_1.25m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2497.183333
+1         32  2386.175  2149.950  3266.200000
+2         48  2828.850  2429.675  3841.933333
+3         64  3250.875  2919.300  3917.616667
+4         80  3536.750  3175.525  4510.033333
+------------------------------
+--
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_1s_visited_50_radius_0.5m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  2086.766667
+1         32  2258.925  2094.225  3259.166667
+2         48  2513.500  2661.100  3884.266667
+3         64  3296.875  3041.175  3677.233333
+4         80  3457.000  3380.575  4188.000000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_1s_visited_50_radius_0.5m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2204.100000
+1         32  3022.750  2236.925  2631.683333
+2         48  3539.650  2355.400  2944.666667
+3         64  3896.125  2695.625  3140.250000
+4         80  3896.125  3074.300  3360.250000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_1s_visited_50_radius_0.5m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2240.566667
+1         32  2386.175  2149.950  2951.733333
+2         48  2828.850  2429.675  3128.616667
+3         64  3250.875  2919.300  3738.500000
+4         80  3536.750  3175.525  3931.933333
+------------------------------
+--
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_1s_visited_50_radius_1.0m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  2249.950000
+1         32  2258.925  2094.225  3594.800000
+2         48  2513.500  2661.100  3915.233333
+3         64  3296.875  3041.175  4353.000000
+4         80  3457.000  3380.575  4705.600000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_1s_visited_50_radius_1.0m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2520.283333
+1         32  3022.750  2236.925  2789.100000
+2         48  3539.650  2355.400  3283.600000
+3         64  3896.125  2695.625  3483.216667
+4         80  3896.125  3074.300  3993.466667
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_1s_visited_50_radius_1.0m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2412.483333
+1         32  2386.175  2149.950  3134.233333
+2         48  2828.850  2429.675  3746.366667
+3         64  3250.875  2919.300  3802.500000
+4         80  3536.750  3175.525  4248.050000
+------------------------------
+--
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_1s_visited_75_radius_0.75m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  1816.950000
+1         32  2258.925  2094.225  3523.250000
+2         48  2513.500  2661.100  4210.866667
+3         64  3296.875  3041.175  4001.433333
+4         80  3457.000  3380.575  4697.800000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_1s_visited_75_radius_0.75m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2463.300000
+1         32  3022.750  2236.925  2705.866667
+2         48  3539.650  2355.400  3078.683333
+3         64  3896.125  2695.625  3412.583333
+4         80  3896.125  3074.300  3503.433333
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_1s_visited_75_radius_0.75m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2183.733333
+1         32  2386.175  2149.950  2942.333333
+2         48  2828.850  2429.675  3244.633333
+3         64  3250.875  2919.300  3824.350000
+4         80  3536.750  3175.525  4205.950000
+------------------------------
+--
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_50_radius_0.5m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  2049.250000
+1         32  2258.925  2094.225  2811.250000
+2         48  2513.500  2661.100  3454.816667
+3         64  3296.875  3041.175  4028.600000
+4         80  3457.000  3380.575  4050.900000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_50_radius_0.5m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2092.050000
+1         32  3022.750  2236.925  2554.383333
+2         48  3539.650  2355.400  2818.116667
+3         64  3896.125  2695.625  3130.383333
+4         80  3896.125  3074.300  3519.100000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_50_radius_0.5m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2004.933333
+1         32  2386.175  2149.950  2829.700000
+2         48  2828.850  2429.675  3291.600000
+3         64  3250.875  2919.300  3584.450000
+4         80  3536.750  3175.525  3821.600000
+------------------------------
+--
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_50_radius_0.75m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  1765.500000
+1         32  2258.925  2094.225  3329.800000
+2         48  2513.500  2661.100  3778.633333
+3         64  3296.875  3041.175  4104.966667
+4         80  3457.000  3380.575  4188.300000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_50_radius_0.75m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2481.800000
+1         32  3022.750  2236.925  2733.100000
+2         48  3539.650  2355.400  3166.233333
+3         64  3896.125  2695.625  3508.533333
+4         80  3896.125  3074.300  3784.216667
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_50_radius_0.75m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2387.150000
+1         32  2386.175  2149.950  2818.800000
+2         48  2828.850  2429.675  3295.783333
+3         64  3250.875  2919.300  3825.550000
+4         80  3536.750  3175.525  4429.114583
+------------------------------
+--
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_50_radius_1.75m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  1863.416667
+1         32  2258.925  2094.225  3654.050000
+2         48  2513.500  2661.100  3884.750000
+3         64  3296.875  3041.175  4243.783333
+4         80  3457.000  3380.575  4961.333333
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_50_radius_1.75m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2640.016667
+1         32  3022.750  2236.925  2955.933333
+2         48  3539.650  2355.400  3178.216667
+3         64  3896.125  2695.625  3587.283333
+4         80  3896.125  3074.300  3657.950000
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_50_radius_1.75m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2303.616667
+1         32  2386.175  2149.950  3058.816667
+2         48  2828.850  2429.675  3784.716667
+3         64  3250.875  2919.300  4038.016667
+4         80  3536.750  3175.525  4318.533333
+------------------------------
+--
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_75_radius_1.25m_arena_14_14/cluster_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1658.700  1606.250  2001.133333
+1         32  2258.925  2094.225  3605.716667
+2         48  2513.500  2661.100  4181.500000
+3         64  3296.875  3041.175  4518.766667
+4         80  3457.000  3380.575  4829.716667
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_75_radius_1.25m_arena_14_14/random_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  2427.300  1743.950  2691.566667
+1         32  3022.750  2236.925  2817.350000
+2         48  3539.650  2355.400  3228.345833
+3         64  3896.125  2695.625  3630.566667
+4         80  3896.125  3074.300  3702.533333
+------------------------------
+Analyzing resource_collection_all/resource_collection_analysis_tol_0.75m_freq_2s_visited_75_radius_1.25m_arena_14_14/powerlaw_distribution
+   Resources      CPFA      GCFA        CCPFA
+0         16  1900.300  1810.200  2390.250000
+1         32  2386.175  2149.950  3220.433333
+2         48  2828.850  2429.675  3818.733333
+3         64  3250.875  2919.300  3957.866667
+4         80  3536.750  3175.525  4631.916667
+------------------------------

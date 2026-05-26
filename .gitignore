@@ -21,3 +21,11 @@ results
 log
 log.txt
 argos3-examples
+CPFA*
+resource*
+analysis*
+*.csv
+*.png
+*.svg
+*.pdf
+*.log
