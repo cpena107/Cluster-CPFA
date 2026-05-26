@@ -415,9 +415,9 @@ void Cluster_controller::DetectLostResource() {
 
 void Cluster_controller::Searching() {
 	// "scan" for food only every half of a second
-	//if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
+	if((SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
 		SetHoldingFood();
-	//}
+	}
 	
 	// If we just picked up food, return immediately to nest
 	// Don't continue with searching logic
@@ -465,8 +465,8 @@ void Cluster_controller::Searching() {
 			// Memory is full — probabilistically return to nest to share visited locations.
 			// Uses the same ProbabilityOfReturningToNest so the tendency to return scales
 			// with the same parameter already tuned for give-up behaviour.
-			if(VisitedLocations.size() >= MaxVisitedLocations) {
-				argos::Real rMem = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
+			if(VisitedLocations.size() >= MaxVisitedLocations && !isInformed) {
+				argos::Real rMem = RNG->Uniform(argos::CRange<argos::Real>(0.0, 0.7));
 				if(rMem < LoopFunctions->ProbabilityOfReturningToNest) {
 					SetFidelityList();
 					TrailToShare.clear();
@@ -487,6 +487,15 @@ void Cluster_controller::Searching() {
 			if(isLostResource == true) {
 			    if(isSpiralSearching) {
 			        SetSpiralSearchLocation();
+					// if we found food while spiral searching, stop spiraling and return to nest
+					SetHoldingFood();
+					if(IsHoldingFood()) {
+						isSpiralSearching = false;
+						SetIsHeadingToNest(true);
+						SetTarget(LoopFunctions->NestPosition);
+						Cluster_state = RETURNING;
+						return;
+					}
 			    } else {
     				SetUnvisitedSearchLocation();
 			    }
@@ -620,6 +629,16 @@ void Cluster_controller::Returning() {
 
 	// Are we there yet? (To the nest, that is.)
 	if(IsInTheNest() == true) {
+		if(isLowClusterMission && lowClusterMissionState == -1 && !isHoldingFood) {
+			cout << "Failed low-cluster mission, marking as lost resource and switching to spiral/unvisited search next time." << endl;
+			ResolveLowClusterMission(-1);
+		}
+		else if(isLowClusterMission && lowClusterMissionState == -1 && isHoldingFood) {
+			cout << "Successful low-cluster mission, marking as success and returning to nest." << endl;
+			ResolveLowClusterMission(1);
+		}
+		// Share visited locations with nest (if returning with food or if giving up search after losing resource)
+		ShareVisitedLocationsWithNest();
 		// Based on a Poisson CDF, the robot may or may not create a pheromone
 		// located at the last place it picked up food.
 		argos::Real poissonCDF_pLayRate    = GetPoissonCDF(ResourceDensity, LoopFunctions->RateOfLayingPheromone);
@@ -632,9 +651,6 @@ void Cluster_controller::Returning() {
 		argos::Real r3 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 
 		if (isHoldingFood) { 
-			if(isLowClusterMission && lowClusterMissionState == -1) {
-				ResolveLowClusterMission(1);
-			}
 	          num_targets_collected++;
 	          LoopFunctions->currNumCollectedFood++;
 	          LoopFunctions->setScore(num_targets_collected);
@@ -647,9 +663,6 @@ void Cluster_controller::Returning() {
 				sharedPheromone.Deactivate(); // make sure this won't get re-added later...
 			}
             TrailToShare.clear();
-            
-            // Share visited locations with nest (successful foraging)
-            ShareVisitedLocationsWithNest();
             
             // Update global trail visualization for this robot only upon successful return
             LoopFunctions->RobotTrails[GetId()] = myTrail; // Copy local trail to global map
@@ -683,7 +696,7 @@ void Cluster_controller::Returning() {
 		}
 		// probabilistically use low-cluster search (third priority, warmed up over time)
 		else if(r3 < adjustedLowClusterFollowRate) {
-				log_output_stream << "Using low-cluster search" << endl;
+				cout << "Using low-cluster search" << endl;
 				SetLowClusterSearchLocation();
 				isInformed = true;
 				isUsingSiteFidelity = false;
@@ -700,17 +713,11 @@ void Cluster_controller::Returning() {
 		isGivingUpSearch = false;
 		Cluster_state = DEPARTING;   
 		isHoldingFood = false;
-
-		if(isLowClusterMission && lowClusterMissionState == -1) {
-			ResolveLowClusterMission(-1);
-		}
 		
 		// If successfully returned with food, clear visited locations for fresh exploration
-		if(!isLostResource) {
-			VisitedLocations.clear();
-			isSpiralSearching = false; // Reset spiral state
-		}
-		
+		VisitedLocations.clear();
+		isSpiralSearching = false; // Reset spiral state
+
 		// Always clear the local trail when leaving the nest to start a new trip
 		myTrail.clear();
 
@@ -763,7 +770,7 @@ void Cluster_controller::SetLowClusterSearchLocation() {
 	LoopFunctions->RegisterLowClusterMission(controllerID, target, SimulationTick());
 	isLowClusterMission = true;
 	lowClusterMissionState = -1;
-	SetIsHeadingToNest(false); // Turn off error for this
+	SetIsHeadingToNest(false);
 	SetTarget(target);
 }
 
@@ -1191,9 +1198,20 @@ void Cluster_controller::SetSpiralSearchLocation() {
     
     argos::Real angle = spiralPathIndex * spiralStepAngle;
     argos::Real currentRadius = spiralGrowthRate * angle; // Archimedian spiral starting from center
-    
+    /*
+	if((collision_counter - spiralCollisionStartCount) > MaxSpiralCollisions) {
+		if(isLowClusterMission && lowClusterMissionState == -1 && !IsHoldingFood()) {
+			ResolveLowClusterMission(1);
+		}
+		isSpiralSearching = false;
+		spiralPathIndex = 0;
+		// return to nest
+		SetIsHeadingToNest(true);
+		SetTarget(LoopFunctions->NestPosition);
+		return;
+	}*/
     // Reset if we exceed the super cluster radius
-    if((collision_counter - spiralCollisionStartCount) > MaxSpiralCollisions || currentRadius > maxRadius) {
+    if(currentRadius > maxRadius) {
 		if(isLowClusterMission && lowClusterMissionState == -1 && !IsHoldingFood()) {
 			ResolveLowClusterMission(0);
 		}

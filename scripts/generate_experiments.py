@@ -7,6 +7,7 @@ def generate_xml_content(dist_name, count, visited_tolerance, rec_freq, max_visi
     num_clusters = "0"
     cluster_width = "8" # default random
     cluster_length = "8" # default random
+    max_radius = (float(arena_x) * float(arena_y)) * 0.005
     
     if dist_name == "clustered":
         food_dist_val = "1"
@@ -85,7 +86,7 @@ def generate_xml_content(dist_name, count, visited_tolerance, rec_freq, max_visi
 
     <!-- evolvable parameters -->
         <Cluster       ProbabilityOfSwitchingToSearching = "0.504"
-                    ProbabilityOfReturningToNest      = "0.002"
+                    ProbabilityOfReturningToNest      = "0.001"
                     ProbabilityOfSearchingLowClusters = "0.001"
                     UninformedSearchVariation         = "7.0"
                     RateOfInformedSearchDecay         = "0.28"

@@ -145,6 +145,11 @@ void Cluster_qt_user_functions::DrawLowClusterTargets() {
 	CSpace& space = CSimulator::GetInstance().GetSpace();
 	CSpace::TMapPerType& footbots = space.GetEntitiesByType("foot-bot");
 
+	// Draw on the top left corner the current count of clusters
+	char buffer[50];
+	snprintf(buffer, sizeof(buffer), "Number of Repulsive Clusters: %d", (int)loopFunctions.VisitedClusters.size());
+	DrawText(CVector3(-loopFunctions.GetSpace().GetArenaSize().GetX() / 2.0 + 0.1, loopFunctions.GetSpace().GetArenaSize().GetY() / 2.0 + 0.05, 0.1), buffer, CColor::RED);
+
 	for(map<string, CVector2>::iterator it = loopFunctions.LowClusterTargetList.begin();
 	    it != loopFunctions.LowClusterTargetList.end(); ++it) {
 		const std::string& robotID = it->first;
@@ -173,7 +178,7 @@ void Cluster_qt_user_functions::DrawTargetRays() {
 	for(std::map<std::string, std::vector<argos::CRay3>>::iterator it = loopFunctions.RobotTrails.begin(); it != loopFunctions.RobotTrails.end(); ++it) {
 		std::string robotID = it->first;
 		std::vector<argos::CRay3>& trails = it->second;
-		
+		/*
 		CColor color = CColor::BLACK;
 		std::map<std::string, CColor>::iterator colorIt = loopFunctions.RobotTrailColors.find(robotID);
 		if(colorIt != loopFunctions.RobotTrailColors.end()) {
@@ -183,6 +188,7 @@ void Cluster_qt_user_functions::DrawTargetRays() {
 		for(size_t j = 0; j < trails.size(); j++) {
 			DrawRay(trails[j], color);
 		}
+			*/
 	}
 
     CColor c = CColor::BLUE;
@@ -191,7 +197,7 @@ void Cluster_qt_user_functions::DrawTargetRays() {
 	}
 
     // Clear search rays periodically to avoid clutter (every 10 seconds)
-    if((int)(loopFunctions.GetSpace().GetSimulationClock()) % ((int)(argos::CSimulator::GetInstance().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick()) * 10) == 0 && loopFunctions.GetSpace().GetSimulationClock() > 0) {
+	if(loopFunctions.getSimTimeInSeconds() > 0 && static_cast<size_t>(loopFunctions.getSimTimeInSeconds()) % 50 == 0) {
 		loopFunctions.SearchLocationRays.clear();
 	}
 }
@@ -222,7 +228,7 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 			char buffer[50];
 			snprintf(buffer, sizeof(buffer), "r: %.2f, visits: %d", 
 					 clusterRadius, loopFunctions.VisitedClusters[i].visitCount);
-			DrawText(CVector3(x - clusterRadius - 0.1, y, 0.05), buffer);
+			//DrawText(CVector3(x - clusterRadius - 0.1, y, 0.05), buffer);
 		//}
 	}
 
@@ -263,13 +269,14 @@ void Cluster_qt_user_functions::DrawVisitedLocations() {
 
 	// Draw real robot-visit points that contributed to a cluster in the last
 	// DBSCAN run as small green cylinders for debugging.
-	/*
+	
 	for(size_t i = 0; i < loopFunctions.ClusteredVisitedLocations.size(); i++) {
 		x = loopFunctions.ClusteredVisitedLocations[i].GetX();
 		y = loopFunctions.ClusteredVisitedLocations[i].GetY();
 		DrawCylinder(CVector3(x, y, 0.0), CQuaternion(), 0.04, 0.03, CColor::GREEN);
+		//DrawCircle(CVector3(x, y, 0.01), CQuaternion(), 0.16, CColor::GREEN, false); // Add a transparent circle to indicate coverage area
 	}
-	*/
+	
 }
 
 /*
