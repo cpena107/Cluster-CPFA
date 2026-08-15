@@ -184,7 +184,7 @@ class Cluster_loop_functions : public argos::CLoopFunctions
 		argos::Real percentCollected;
 		argos::Real timeIntervalForRecording;
 		argos::Real VisitedLocationTolerance;
-		argos::vector<argos::CVector2> ClusteredLocationsForRecording;
+		vector<argos::CVector2> ClusteredLocationsForRecording;
 
 	private:
 

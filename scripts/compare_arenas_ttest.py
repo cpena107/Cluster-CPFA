@@ -9,7 +9,7 @@ from scipy.stats import ttest_ind
 BASE_DIR = os.path.join(
     os.path.dirname(__file__),
     "..",
-    "resource_collection_arenas",
+    "resource_collection_arenas_4_22",
     "resource_collection_analysis_tol_0.75m_freq_2s_visited_75_radius_0.5m",
     "arenas"
 )
@@ -85,12 +85,12 @@ def plot_arenas(baseline: str = "baseline",
     sns.set_theme(style='whitegrid')
     sns.set_context('paper', font_scale=1.5)
     plt.rcParams.update({
-        'font.size': 12,
+        'font.size': 18,
         'axes.titlesize': 16,
         'axes.labelsize': 14,
-        'xtick.labelsize': 12,
-        'ytick.labelsize': 12,
-        'legend.fontsize': 12,
+        'xtick.labelsize': 20,
+        'ytick.labelsize': 20,
+        'legend.fontsize': 14,
     })
 
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -112,8 +112,8 @@ def plot_arenas(baseline: str = "baseline",
         ax=ax,
     )
 
-    ax.set_xlabel('Arena Size (meters)')
-    ax.set_ylabel('Time (seconds)')
+    ax.set_xlabel('Arena Size (meters)', fontsize=24)
+    ax.set_ylabel('Time (seconds)', fontsize=24)
 
     for artist in getattr(ax, 'artists', []):
         artist.set_edgecolor('black')
@@ -147,10 +147,10 @@ def plot_arenas(baseline: str = "baseline",
 
         # Lower bracket: GCFA vs ARPC
         draw_bracket(ax, x_gcfa, x_ARPC, y_base + gap * 0.6,
-                     sig_label(p_gcfa), fontsize=8)
+                     sig_label(p_gcfa), fontsize=14)
         # Upper bracket: CPFA vs ARPC
         draw_bracket(ax, x_cpfa, x_ARPC, y_base + gap * 1.7,
-                     sig_label(p_cpfa), fontsize=8)
+                     sig_label(p_cpfa), fontsize=14)
 
     ax.legend(loc='upper left', borderaxespad=0.5, title='')
 

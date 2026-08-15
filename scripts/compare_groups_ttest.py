@@ -8,7 +8,7 @@ from scipy.stats import ttest_ind
 BASE_DIR = os.path.join(
     os.path.dirname(__file__),
     "..",
-    "resource_collection_all",
+    "resource_collection_all_4_22",
     "resource_collection_analysis_tol_0.75m_freq_2s_visited_75_radius_0.75m_arena_14_14",
 )
 
@@ -88,12 +88,12 @@ def plot_distribution(distribution: str,
     sns.set_theme(style='whitegrid')
     sns.set_context('paper', font_scale=2.2)
     plt.rcParams.update({
-        'font.size': 16,
-        'axes.titlesize': 24,
-        'axes.labelsize': 18,
-        'xtick.labelsize': 16,
-        'ytick.labelsize': 16,
-        'legend.fontsize': 16,
+        'font.size': 18,
+        'axes.titlesize': 16,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 20,
+        'ytick.labelsize': 20,
+        'legend.fontsize': 14,
     })
 
     fig, ax = plt.subplots(figsize=(14, 7))
@@ -118,8 +118,8 @@ def plot_distribution(distribution: str,
         ax=ax,
     )
 
-    ax.set_ylabel('Time (seconds)', fontsize=18)
-    ax.set_xlabel('Number of Resources', fontsize=18)
+    ax.set_ylabel('Time (seconds)', fontsize=24)
+    ax.set_xlabel('Number of Resources', fontsize=24)
 
     for artist in ax.artists:
         artist.set_edgecolor('black')
@@ -153,10 +153,10 @@ def plot_distribution(distribution: str,
 
         # Lower bracket: GCFA vs ARPC
         draw_bracket(ax, x_gcfa, x_ARPC, y_base + gap * 0.6,
-                     sig_label(p_gcfa), fontsize=8)
+                     sig_label(p_gcfa), fontsize=14)
         # Upper bracket: CPFA vs ARPC
         draw_bracket(ax, x_cpfa, x_ARPC, y_base + gap * 1.7,
-                     sig_label(p_cpfa), fontsize=8)
+                     sig_label(p_cpfa), fontsize=14)
 
     # ---- legend (inside plot, top-left) ----
     ax.legend(loc='upper left', borderaxespad=0.5, title='')
