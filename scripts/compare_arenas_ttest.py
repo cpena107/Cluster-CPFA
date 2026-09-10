@@ -9,7 +9,7 @@ from scipy.stats import ttest_ind
 BASE_DIR = os.path.join(
     os.path.dirname(__file__),
     "..",
-    "resource_collection_arenas_4_22",
+    "resource_collection_arenas",
     "resource_collection_analysis_tol_0.75m_freq_2s_visited_75_radius_0.5m",
     "arenas"
 )

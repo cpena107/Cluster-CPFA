@@ -8,8 +8,8 @@ from scipy.stats import ttest_ind
 BASE_DIR = os.path.join(
     os.path.dirname(__file__),
     "..",
-    "resource_collection_all_4_22",
-    "resource_collection_analysis_tol_0.75m_freq_2s_visited_75_radius_0.75m_arena_14_14",
+    "resource_collection_all",
+    "resource_collection_analysis_tol_0.75m_freq_2s_visited_75_radius_0.5m_arena_14_14",
 )
 
 DISTRIBUTIONS = ["cluster_distribution", "powerlaw_distribution", "random_distribution"]
